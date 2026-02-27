@@ -62,7 +62,7 @@ with st.sidebar:
     display_time = st.session_state.last_update.replace("T", " ")[:19] if "T" in st.session_state.last_update else st.session_state.last_update
     st.markdown(f"<div style='color:#848e9c; font-size:0.8rem;'>資料庫最後同步:<br><span style='color:#eaecef;'>{display_time}</span></div>", unsafe_allow_html=True)
 
-# 頂部導航列 (優化刷新按鈕，使其短小精悍)
+# 頂部導航列 (短小精悍的刷新按鈕)
 c_title, c_btn = st.columns([10, 2], vertical_alignment="bottom")
 with c_title:
     st.markdown('<h2 style="color:#eaecef; margin:0; font-family:Inter; font-weight:600; font-size:1.8rem;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -80,29 +80,15 @@ def dashboard_fragment():
     time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
     st.toast(f"資料已同步 ({time_str})", icon="✅")
 
-    # 1. AI 診斷與系統狀態
-    is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
-    spoof_color = "#f6465d" if is_spoofed else "#0ecb81"
-    spoof_bg = "rgba(246, 70, 93, 0.1)" if is_spoofed else "rgba(14, 203, 129, 0.05)"
-    spoof_text = "FRR 溢價警告" if is_spoofed else "市場利率結構正常"
-
+    # 1. AI 診斷 (移至最上方，拔除上方狀態列)
     st.markdown(f'''
-    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px; margin-bottom: 15px;'>
-        <div style='color:{spoof_color}; font-size:0.8rem; font-weight:500; border:1px solid {spoof_color}; padding:4px 10px; border-radius:4px; background:{spoof_bg};'>
-            {spoof_text} (報價: {data.get('market_frr', 0):.1f}% / 基準: {data.get('market_twap', 0):.1f}%)
-        </div>
-        <div style='color:#848e9c; font-size:0.8rem;'>
-            策略側錄: <span style='color:#eaecef; font-weight:500;'>{data.get('logged_decisions_count', 0)} 筆</span>
-        </div>
-    </div>
-    
-    <div class="okx-panel" style="padding: 16px; border-left: 3px solid #fcd535;">
+    <div class="okx-panel" style="padding: 16px; border-left: 3px solid #fcd535; margin-top: 15px;">
         <div style="color: #fcd535; font-weight: 600; font-size: 0.85rem; margin-bottom: 8px;">策略分析引擎</div>
         <div style="color: #eaecef; font-size: 0.85rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div>
     </div>
     ''', unsafe_allow_html=True)
 
-    # 2. 核心資產數據 (去蕪存菁)
+    # 2. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f'''
     <div class="okx-panel">
@@ -141,7 +127,6 @@ def dashboard_fragment():
     tab_main, tab_loans, tab_offers = st.tabs(["策略表現", "活躍借出", "排隊掛單"])
 
     with tab_main:
-        # ETF 矩陣
         current_apy = data.get('hist_apy', 0) if data.get('auto_p', 0) > 0 else data.get('stats', {}).get('overall', {}).get('true_apy', 0)
         st.markdown("<div style='color:#eaecef; font-weight:500; font-size:0.9rem; margin:15px 0 10px 0;'>標竿對比 (Benchmark)</div>", unsafe_allow_html=True)
         etf_data = [{"name": "本策略", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
@@ -169,7 +154,6 @@ def dashboard_fragment():
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
-        # 歷史回測數據 (修正換行問題，改用嚴格左右對齊)
         o_stat = data.get('stats', {}).get('overall', {})
         st.markdown("<div style='color:#eaecef; font-weight:500; font-size:0.9rem; margin:20px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
         if o_stat.get("is_empty"): 
@@ -200,7 +184,6 @@ def dashboard_fragment():
         if not loans_data:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 40px;'>目前無活躍借出合約</div>", unsafe_allow_html=True)
         else:
-            # 【關鍵修復】使用最純粹的 HTML 串接，不留任何換行縮排，徹底阻絕 Code Block 解析問題
             cards_html = "<div class='okx-card-grid'>"
             for l in loans_data:
                 cards_html += "<div class='okx-item-card'>"
@@ -229,7 +212,6 @@ def dashboard_fragment():
         if not offers_data:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 40px;'>目前無排隊中掛單</div>", unsafe_allow_html=True)
         else:
-            # 同上，消除縮排引發的 Streamlit 渲染 Bug
             cards_html = "<div class='okx-card-grid'>"
             for o in offers_data:
                 status_raw = o['狀態']
@@ -256,5 +238,29 @@ def dashboard_fragment():
                 cards_html += "</div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
+
+    # 4. 底部系統監控列 (取代原本在頂部的複雜區塊)
+    st.markdown("<hr style='border-color: #2b3139; margin:30px 0 15px 0;'>", unsafe_allow_html=True)
+    
+    is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
+    spoof_class = "alert" if is_spoofed else ""
+    spoof_text = "FRR 溢價警告" if is_spoofed else "利率結構健康"
+
+    st.markdown(f'''
+    <div style="margin-bottom: 20px;">
+        <div class="footer-tag {spoof_class}">
+            市場狀態: <span>{spoof_text}</span>
+        </div>
+        <div class="footer-tag">
+            FRR 報價: <span>{data.get('market_frr', 0):.1f}%</span>
+        </div>
+        <div class="footer-tag">
+            TWAP 基準: <span>{data.get('market_twap', 0):.1f}%</span>
+        </div>
+        <div class="footer-tag">
+            策略側錄: <span>{data.get('logged_decisions_count', 0)} 筆決策</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
 
 dashboard_fragment()
