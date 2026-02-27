@@ -37,25 +37,17 @@ except FileNotFoundError:
 
 # ================= 3. 資料獲取 (純讀取快取) =================
 async def fetch_cached_data() -> dict:
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        return {}
-    
-    headers = {
-        "apikey": SUPABASE_KEY, 
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
-    
+    if not SUPABASE_URL or not SUPABASE_KEY: return {}
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.1", headers=headers, timeout=5) as res:
                 if res.status == 200:
                     data = await res.json()
                     if data and len(data) > 0:
-                        # 記錄最後更新時間，方便前台比對
                         st.session_state.last_update = data[0].get('updated_at', '未知時間')
                         return data[0].get('payload', {})
-    except Exception as e:
-        logger.error(f"UI Fetch Error: {e}")
+    except Exception as e: logger.error(f"UI Fetch Error: {e}")
     return {}
 
 # ================= 4. UI 渲染邏輯 =================
@@ -69,10 +61,8 @@ with st.sidebar:
     
     st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin:15px 0;'>", unsafe_allow_html=True)
     
-    # 處理時間格式，將 UTC 轉為視覺上友善的格式
     display_time = st.session_state.last_update
-    if "T" in display_time:
-        display_time = display_time.replace("T", " ")[:19]
+    if "T" in display_time: display_time = display_time.replace("T", " ")[:19]
     st.markdown(f"<div style='color:#8899a6; font-size:0.75rem;'>雲端引擎最後同步:<br>{display_time} (UTC)</div>", unsafe_allow_html=True)
 
 c_title, c_btn = st.columns([4, 1])
@@ -80,8 +70,7 @@ with c_title:
     st.markdown('<h2 style="color:#4ade80; margin:0; font-family:Orbitron; letter-spacing:1px; line-height:1.2;">BITFINEX 儀表板</h2>', unsafe_allow_html=True)
 with c_btn:
     st.markdown('<div class="top-refresh-btn">', unsafe_allow_html=True)
-    if st.button("🔄 刷新", use_container_width=True):
-        st.rerun()
+    if st.button("🔄 刷新", use_container_width=True): st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
@@ -90,10 +79,9 @@ def dashboard_fragment():
         data = asyncio.run(fetch_cached_data())
         
     if not data:
-        st.warning("⏳ 尚未取得後端引擎的資料，請確認 Render 上的 Worker 是否正常運作中，或等待下一分鐘的同步。")
+        st.warning("⏳ 尚未取得後端引擎的資料，請確認 Render 上的 Worker 是否正常運作中。")
         st.stop()
 
-    # 渲染 AI 洞察
     st.markdown(f'''
     <div class="metro-box" style="border-left: 4px solid #f97316; padding: 15px; margin-bottom: 15px;">
         <div class="ai-scanner-wrapper"><div class="ai-scanner-line"></div></div>
@@ -104,7 +92,6 @@ def dashboard_fragment():
     </div>
     ''', unsafe_allow_html=True)
 
-    # 渲染防禦狀態標籤
     c_btn1, c_btn2 = st.columns([3, 1])
     with c_btn1: 
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
@@ -119,15 +106,14 @@ def dashboard_fragment():
             </div>
         </div>''', unsafe_allow_html=True)
     with c_btn2: 
-        pass # UI 端不再負責喚醒引擎，交由背景 Render 每分鐘自動執行並寫入
+        pass 
 
-    # 渲染頂部總覽
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "🏆 零成本"
     st.markdown(f'''
     <div class="metro-box" style="border-left: 4px solid #4ade80; padding: 15px;">
         <div class="top-summary-grid">
             <div><div class="label-text">投入本金 <span style='font-weight:normal; font-size:0.7rem;'>({START_DATE_STR[5:]})</span></div><div class="value-text">{auto_p_display}</div></div>
-            <div><div class="label-text">浮動配息預估</div><div class="value-text" style="color:#4ade80;">+${data.get("floating_payout", 0):.2f}</div></div>
+            <div><div class="label-text">今日收益</div><div class="value-text" style="color:#4ade80;">+${data.get("today_profit", 0):.2f}</div></div>
             <div><div class="label-text">歷史總收益</div><div class="value-text" style="color:#4ade80;">+${data.get("history", 0):,.2f}</div></div>
         </div>
         <div style="border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 5px; padding-top: 10px;">
@@ -137,7 +123,6 @@ def dashboard_fragment():
         </div>
     </div>''', unsafe_allow_html=True)
 
-    # 渲染四宮格狀態
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "無資金"
     st.markdown(f'''
     <div class="metro-box" style="padding:15px;">
@@ -215,7 +200,6 @@ def dashboard_fragment():
     with tab_loans:
         st.markdown("<h5 style='color:#4ade80; font-size:0.85rem; margin-top:5px; margin-bottom:10px;'>🟢 已成交借出明細 (點擊標題排序)</h5>", unsafe_allow_html=True)
         if data.get('loans'):
-            # 確保不會渲染到用來內部排序的隱藏欄位 "_sort_sec"
             df_loans = pd.DataFrame(data['loans']).drop(columns=['_sort_sec'], errors='ignore')
             st.dataframe(
                 df_loans,
