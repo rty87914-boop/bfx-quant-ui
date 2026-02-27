@@ -62,6 +62,7 @@ with st.sidebar:
     display_time = st.session_state.last_update.replace("T", " ")[:19] if "T" in st.session_state.last_update else st.session_state.last_update
     st.markdown(f"<div style='color:#7a808a; font-size:0.85rem;'>資料庫最後同步:<br><span style='color:#ffffff;'>{display_time}</span></div>", unsafe_allow_html=True)
 
+# 頂部導航列 
 c_title, c_btn = st.columns([10, 2], vertical_alignment="bottom")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:2rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -79,14 +80,11 @@ def dashboard_fragment():
     time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
     st.toast(f"資料已同步 ({time_str})", icon="🟢")
 
-    # 1. AI 診斷
-    st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>策略分析引擎</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
-
-    # 2. 核心資產數據
+    # 1. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
-    st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value" style="font-size:2.5rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value" style="font-size:2.5rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
-    # 3. 策略指標狀態
+    # 2. 策略指標狀態 
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "--"
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">當前淨年化</div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
@@ -121,6 +119,9 @@ def dashboard_fragment():
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a;'>等待數據收集</div>", unsafe_allow_html=True)
         else:
             st.markdown(f"""<div class='okx-panel'><div class='okx-list-item border-bottom'><div class='okx-list-label'>真實等效年化 (True APY)</div><div class='okx-list-value text-green' style='font-size:1.4rem;'>{o_stat.get('true_apy', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均毛年化</div><div class='okx-list-value'>{o_stat.get('gross_rate', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均撮合耗時</div><div class='okx-list-value'>{o_stat.get('wait', 0):.1f} h</div></div><div class='okx-list-item'><div class='okx-list-label'>平均存活時間</div><div class='okx-list-value'>{o_stat.get('survive', 0):.1f} h</div></div></div>""", unsafe_allow_html=True)
+
+        # 【搬移完成】AI 策略分析引擎改至此處
+        st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>策略分析引擎</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
 
     with tab_loans:
         loans_data = data.get('loans', [])
