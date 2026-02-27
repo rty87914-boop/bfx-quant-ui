@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 全局 OKX 級暗色背景 */
+/* 全局 OLED 純黑背景 */
 html, body, [data-testid="stAppViewContainer"], .stApp { 
-    background-color: #0b0e11 !important; 
+    background-color: #000000 !important; 
     background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
 }
@@ -10,111 +10,109 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"] { display: none !important; }
 
-/* 刷新按鈕精緻化 */
+/* 刷新按鈕：圓潤膠囊風格 */
 .stButton > button {
     width: auto !important;
-    padding: 4px 16px !important;
-    background-color: #181a20 !important;
-    border: 1px solid #2b3139 !important;
-    color: #eaecef !important;
-    border-radius: 6px !important;
+    padding: 6px 20px !important;
+    background-color: #121418 !important;
+    border: none !important;
+    color: #ffffff !important;
+    border-radius: 20px !important;
     font-size: 0.85rem !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
     transition: all 0.2s ease !important;
 }
 .stButton > button:hover {
-    border-color: #474d57 !important;
-    background-color: #2b3139 !important;
+    background-color: #1e2228 !important;
+    color: #b2ff22 !important;
 }
 .stButton > button:active {
-    border-color: #0ecb81 !important;
-    color: #0ecb81 !important;
+    background-color: #b2ff22 !important;
+    color: #000000 !important;
 }
 
-/* OKX 風格標準面板 */
+/* Web3 無邊框面板 */
 .okx-panel { 
-    background: #181a20; 
-    border: 1px solid #2b3139; 
-    border-radius: 8px; 
-    padding: 20px; 
-    margin-bottom: 20px; 
-    transition: border-color 0.2s ease;
+    background: #0c0e12; 
+    border: none; 
+    border-radius: 16px; 
+    padding: 24px; 
+    margin-bottom: 16px; 
 }
-.okx-panel:hover { border-color: #474d57; }
 
-/* 字體規範 */
-.okx-label { color: #848e9c; font-size: 0.8rem; margin-bottom: 4px; font-weight: 500; }
-.okx-value { color: #eaecef; font-size: 1.5rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
-.okx-subtext { color: #5e6673; font-size: 0.75rem; margin-top: 4px; }
+/* 字體規範 (對齊純黑風格的高對比) */
+.okx-label { color: #7a808a; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500; }
+.okx-value { color: #ffffff; font-size: 1.8rem; font-weight: 700; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
+.okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; }
+.okx-subtext { color: #5e6673; font-size: 0.8rem; margin-top: 4px; font-weight: 500; }
 
-/* 狀態色彩 */
-.text-green { color: #0ecb81 !important; }
-.text-red { color: #f6465d !important; }
+/* 狀態色彩 (螢光綠主調) */
+.text-green { color: #b2ff22 !important; }
+.text-red { color: #ff4d4f !important; }
 .text-yellow { color: #fcd535 !important; }
 
-/* 狀態列網格 */
+/* 狀態列網格 (四宮格) */
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.status-card { background: #0b0e11; border-radius: 6px; padding: 16px 12px; border: 1px solid #2b3139; transition: background 0.2s; }
-.status-card:hover { background: #1e2329; }
+.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: none; }
 
-/* 交易所標準列表排版 */
+/* 交易所標準列表排版 (無邊框分隔線) */
 .okx-list-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 12px 0;
 }
-.okx-list-item.border-bottom { border-bottom: 1px solid #2b3139; }
-.okx-list-label { color: #848e9c; font-size: 0.85rem; font-weight: 500; }
-.okx-list-value { color: #eaecef; font-size: 0.9rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; text-align: right; }
+.okx-list-item.border-bottom { border-bottom: 1px solid #1a1d24; }
+.okx-list-label { color: #7a808a; font-size: 0.9rem; font-weight: 500; }
+.okx-list-value { color: #ffffff; font-size: 1rem; font-weight: 600; text-align: right; }
 
 /* =========================================
    卡片牆專屬佈局
 ========================================= */
-.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 10px; }
+.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
 .okx-item-card { 
-    background: #0b0e11; 
-    border: 1px solid #2b3139; 
-    border-radius: 8px; 
-    padding: 16px; 
+    background: #0c0e12; 
+    border: none; 
+    border-radius: 16px; 
+    padding: 20px; 
     display: flex; 
     flex-direction: column; 
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    transition: transform 0.2s ease;
 }
-.okx-item-card:hover { transform: translateY(-2px); border-color: #474d57; background: #181a20; }
+.okx-item-card:hover { transform: translateY(-2px); background: #121418; }
 
-.okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2b3139; padding-bottom: 12px; margin-bottom: 8px; }
-.okx-tag { padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
-.tag-green { color: #0ecb81; background: rgba(14, 203, 129, 0.1); border: 1px solid rgba(14, 203, 129, 0.2); }
-.tag-yellow { color: #fcd535; background: rgba(252, 213, 53, 0.1); border: 1px solid rgba(252, 213, 53, 0.2); }
-.tag-red { color: #f6465d; background: rgba(246, 70, 93, 0.1); border: 1px solid rgba(246, 70, 93, 0.2); }
-.tag-gray { color: #848e9c; background: rgba(132, 142, 156, 0.1); border: 1px solid rgba(132, 142, 156, 0.2); }
-.okx-card-amt { font-size: 1.15rem; font-weight: 600; color: #eaecef; font-family: 'JetBrains Mono', monospace; }
+.okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 16px; margin-bottom: 8px; }
+.okx-tag { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+.tag-green { color: #000000; background: #b2ff22; }
+.tag-yellow { color: #000000; background: #fcd535; }
+.tag-red { color: #ffffff; background: #ff4d4f; }
+.okx-card-amt { font-size: 1.4rem; font-weight: 700; color: #ffffff; }
 
 /* ETF 對標四宮格 */
-.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
-.etf-card { background: #0b0e11; padding: 16px; border-radius: 8px; text-align: center; border: 1px solid #2b3139; }
-.etf-card:hover { border-color: #474d57; background: #1e2329; }
-.etf-title { font-size: 0.8rem; color: #848e9c; margin-bottom: 8px; font-weight: 500;}
-.etf-rate { font-size: 1.3rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #eaecef; }
+.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 16px; text-align: center; border: none; }
+.etf-card-active { background: rgba(178, 255, 34, 0.05); border: 1px solid rgba(178, 255, 34, 0.3); }
+.etf-title { font-size: 0.85rem; color: #7a808a; margin-bottom: 8px; font-weight: 500;}
+.etf-rate { font-size: 1.6rem; font-weight: 700; color: #ffffff; }
 
 /* 底部狀態列標籤 */
 .footer-tag {
     display: inline-block;
-    color: #848e9c;
-    font-size: 0.8rem;
-    background: #0b0e11;
-    border: 1px solid #2b3139;
-    padding: 6px 12px;
-    border-radius: 6px;
+    color: #7a808a;
+    font-size: 0.85rem;
+    background: #0c0e12;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
     margin-right: 10px;
     margin-top: 10px;
+    font-weight: 500;
 }
-.footer-tag span { color: #eaecef; font-weight: 500; }
-.footer-tag.alert span { color: #f6465d; }
+.footer-tag span { color: #ffffff; font-weight: 600; }
+.footer-tag.alert span { color: #ff4d4f; }
 
 /* 隱藏預設元件，美化版面 */
 header, footer {visibility: hidden;} .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 1100px;}
 [data-testid="stTabs"] { margin-top: 10px; }
-[data-testid="stTabs"] button { color: #848e9c !important; font-weight: 500; font-size: 0.9rem !important;}
-[data-testid="stTabs"] button[aria-selected="true"] { color: #eaecef !important; font-weight: 600; border-bottom-color: #0ecb81 !important; }
+[data-testid="stTabs"] button { color: #7a808a !important; font-weight: 500; font-size: 1rem !important;}
+[data-testid="stTabs"] button[aria-selected="true"] { color: #ffffff !important; font-weight: 700; border-bottom-color: #b2ff22 !important; }
