@@ -98,11 +98,15 @@ def dashboard_fragment():
         spoof_color = "#ef4444" if is_spoofed else "#4ade80"
         spoof_text = "🚨 FRR 虛標警告" if is_spoofed else "🛡️ 市場利率健康"
         
+        # 【修正】加回側錄筆數顯示
         st.markdown(f'''
         <div style='display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 10px;'>
             <div style='color:#8899a6; font-size:0.75rem;'>🟢 雲端同步中</div>
             <div style='color:{spoof_color}; font-size:0.75rem; border:1px solid rgba({239 if is_spoofed else 74},{68 if is_spoofed else 222},{68 if is_spoofed else 128},0.3); padding:2px 8px; border-radius:12px; background:rgba({239 if is_spoofed else 74},{68 if is_spoofed else 222},{68 if is_spoofed else 128},0.1);'>
                 {spoof_text} (FRR: {data.get('market_frr', 0):.1f}% / 真實: {data.get('market_twap', 0):.1f}%)
+            </div>
+            <div style='color:#4ade80; font-size:0.75rem; border:1px solid rgba(74,222,128,0.3); padding:2px 8px; border-radius:12px; background:rgba(74,222,128,0.1);'>
+                🕵️ 側錄：捕獲 {data.get('logged_decisions_count', 0)} 筆
             </div>
         </div>''', unsafe_allow_html=True)
     with c_btn2: 
