@@ -35,7 +35,7 @@ try:
 except FileNotFoundError:
     logger.warning("找不到 style.css，請確認檔案位置。")
 
-# ================= 3. 資料獲取引擎 (雙管齊下) =================
+# ================= 3. 資料獲取引擎 (加入 TWAP 欄位) =================
 async def fetch_cached_data(session) -> dict:
     if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -53,8 +53,8 @@ async def fetch_bot_decisions(session) -> list:
     if not SUPABASE_URL: return []
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
-        # 抓取最近 100 筆機器人決策紀錄
-        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,bot_amount,bot_period&order=created_at.desc&limit=100", headers=headers, timeout=5) as res:
+        # 新增抓取 market_twap
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,market_twap,bot_amount,bot_period&order=created_at.desc&limit=100", headers=headers, timeout=5) as res:
             if res.status == 200:
                 return await res.json()
     except Exception as e: logger.error(f"Decisions Fetch Error: {e}")
@@ -84,7 +84,6 @@ with c_btn:
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
-    # 同步拉取核心快取與側錄數據
     data, decisions = asyncio.run(fetch_all_data())
     
     if not data:
@@ -94,15 +93,12 @@ def dashboard_fragment():
     time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
     st.toast(f"資料已同步 ({time_str})", icon="🟢")
 
-    # 1. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value" style="font-size:2.5rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
-    # 2. 策略指標狀態 
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "--"
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">當前淨年化</div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
-    # 3. 頁籤區域 (新增第 4 頁籤：歸因分析)
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["策略表現", "活躍借出", "排隊掛單", "🤖 歸因分析"])
 
     with tab_main:
@@ -190,52 +186,61 @@ def dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 4. 歸因分析頁籤 (全新加入)
+    # 4. 歸因分析頁籤 (全新加入 TWAP 雙指標對比)
     with tab_analytics:
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫正在收集決策樣本，請稍後...</div>", unsafe_allow_html=True)
         else:
             df = pd.DataFrame(decisions)
             
-            # 確保欄位存在且進行時區轉換
             if 'created_at' in df.columns:
                 df['時間'] = pd.to_datetime(df['created_at']).dt.tz_convert('Asia/Taipei')
             else:
                 df['時間'] = pd.Series(range(len(df)))
 
             if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
+                # 安全兼容：舊資料如果沒有 market_twap，就暫時拿 FRR 來填補避免當機
+                if 'market_twap' not in df.columns:
+                    df['market_twap'] = df['market_frr']
+                else:
+                    df['market_twap'] = df['market_twap'].fillna(df['market_frr'])
+                
                 df['表面FRR (紅)'] = df['market_frr']
+                df['真實TWAP (藍)'] = df['market_twap']
                 df['機器人報價 (綠)'] = df['bot_rate_yearly']
                 
-                # 計算策略指標
-                premium_count = len(df[df['bot_rate_yearly'] >= df['market_frr']])
-                win_rate = (premium_count / len(df)) * 100 if len(df) > 0 else 0
-                avg_spread = (df['bot_rate_yearly'] - df['market_frr']).mean()
+                # 同時計算兩種基準的勝率與 Alpha
+                win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
+                avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
+                win_rate_frr = (len(df[df['bot_rate_yearly'] >= df['market_frr']]) / len(df)) * 100 if len(df) > 0 else 0
 
-                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:20px 0 12px 0;'>策略智商評估 (對標 FRR)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:20px 0 12px 0;'>策略智商雙引擎對標</div>", unsafe_allow_html=True)
                 
-                summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">溢價捕捉率 (勝率)</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate:.1f}%</div></div><div><div class="okx-label">平均超額報酬 (Alpha)</div><div class="okx-value {'text-green' if avg_spread >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread:+.2f}%</div></div><div><div class="okx-label">分析樣本數</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{len(df)} <span style="font-size:0.9rem; color:#7a808a;">筆</span></div></div></div>"""
+                summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">勝率 (對標真 TWAP)</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate_twap:.1f}%</div></div><div><div class="okx-label">超額報酬 (真 Alpha)</div><div class="okx-value {'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread_twap:+.2f}%</div></div><div><div class="okx-label">勝率 (對標表面 FRR)</div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#848e9c;">{win_rate_frr:.1f}%</div></div></div>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
-                # 繪製雷達散佈圖 (純黑背景，紅色對比螢光綠)
-                st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊圖例可開關)</div>", unsafe_allow_html=True)
-                df_chart = df.set_index('時間')[['表面FRR (紅)', '機器人報價 (綠)']]
-                st.scatter_chart(df_chart, color=["#ff4d4f", "#b2ff22"], height=300)
+                # 雷達散佈圖 (三線對比版)
+                st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊下方圖例可開關個別線條)</div>", unsafe_allow_html=True)
+                df_chart = df.set_index('時間')[['表面FRR (紅)', '真實TWAP (藍)', '機器人報價 (綠)']]
+                # 設定顏色：紅色=FRR, 藍色=TWAP, 綠色=您的機器人
+                st.scatter_chart(df_chart, color=["#ff4d4f", "#0ea5e9", "#b2ff22"], height=300)
                 
-                # 近期決策明細表
-                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:30px 0 12px 0;'>機器人操作日誌 (近期 10 筆)</div>", unsafe_allow_html=True)
+                # 近期決策明細卡片牆 (同時顯示雙指標)
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:30px 0 12px 0;'>機器人雙眼操作日誌 (近期 10 筆)</div>", unsafe_allow_html=True)
                 cards_html = "<div class='okx-card-grid'>"
                 for _, row in df.head(10).iterrows():
                     amt = row.get('bot_amount', 0)
                     bot_rate = row.get('bot_rate_yearly', 0)
+                    twap = row.get('market_twap', 0)
                     frr = row.get('market_frr', 0)
                     time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
                     
-                    spread = bot_rate - frr
-                    tag_class = "tag-green" if spread >= 0 else "tag-red"
-                    spread_str = f"+{spread:.2f}%" if spread >= 0 else f"{spread:.2f}%"
+                    # 卡片右上角標籤改為顯示「對標 TWAP」的真實 Alpha
+                    spread_twap = bot_rate - twap
+                    tag_class = "tag-green" if spread_twap >= 0 else "tag-red"
+                    spread_twap_str = f"+{spread_twap:.2f}%" if spread_twap >= 0 else f"{spread_twap:.2f}%"
                     
-                    cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_str}</span><span class='okx-card-amt'>${amt:,.2f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>機器人報價</span><span class='okx-list-value okx-value-mono'>{bot_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>當時 FRR</span><span class='okx-list-value okx-value-mono'>{frr:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>決策時間</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{time_str}</span></div></div>"
+                    cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>真 Alpha {spread_twap_str}</span><span class='okx-card-amt'>${amt:,.2f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>機器人報價</span><span class='okx-list-value okx-value-mono text-green'>{bot_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>真實成交 (TWAP)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{twap:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>表面報價 (FRR)</span><span class='okx-list-value okx-value-mono' style='color:#ff4d4f;'>{frr:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>決策時間</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{time_str}</span></div></div>"
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
