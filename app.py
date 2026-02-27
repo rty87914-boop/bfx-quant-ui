@@ -1,6 +1,7 @@
 import streamlit as st
 import aiohttp
 import asyncio
+import pandas as pd
 from datetime import timedelta
 import logging
 
@@ -20,7 +21,7 @@ START_DATE_STR = "2026-02-11"
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
-if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 120
+if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 60
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
 # ================= 2. 視覺風格定義 =================
@@ -46,11 +47,11 @@ async def fetch_cached_data() -> dict:
     
     try:
         async with aiohttp.ClientSession() as session:
-            # 只讀取我們後端引擎準備好在 id=1 的那包整理好的 payload
             async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.1", headers=headers, timeout=5) as res:
                 if res.status == 200:
                     data = await res.json()
                     if data and len(data) > 0:
+                        # 記錄最後更新時間，方便前台比對
                         st.session_state.last_update = data[0].get('updated_at', '未知時間')
                         return data[0].get('payload', {})
     except Exception as e:
@@ -67,7 +68,12 @@ with st.sidebar:
     st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分", 120:"2分", 300:"5分"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
     
     st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin:15px 0;'>", unsafe_allow_html=True)
-    st.markdown(f"<div style='color:#8899a6; font-size:0.75rem;'>最後同步: {st.session_state.last_update[:19]}</div>", unsafe_allow_html=True)
+    
+    # 處理時間格式，將 UTC 轉為視覺上友善的格式
+    display_time = st.session_state.last_update
+    if "T" in display_time:
+        display_time = display_time.replace("T", " ")[:19]
+    st.markdown(f"<div style='color:#8899a6; font-size:0.75rem;'>雲端引擎最後同步:<br>{display_time} (UTC)</div>", unsafe_allow_html=True)
 
 c_title, c_btn = st.columns([4, 1])
 with c_title:
@@ -84,7 +90,7 @@ def dashboard_fragment():
         data = asyncio.run(fetch_cached_data())
         
     if not data:
-        st.warning("⏳ 尚未取得後端引擎的資料，請確認 Render 上的 Worker 是否正常運作中。")
+        st.warning("⏳ 尚未取得後端引擎的資料，請確認 Render 上的 Worker 是否正常運作中，或等待下一分鐘的同步。")
         st.stop()
 
     # 渲染 AI 洞察
@@ -113,7 +119,7 @@ def dashboard_fragment():
             </div>
         </div>''', unsafe_allow_html=True)
     with c_btn2: 
-        pass # UI 端不再負責喚醒引擎，交由背景每分鐘自動執行
+        pass # UI 端不再負責喚醒引擎，交由背景 Render 每分鐘自動執行並寫入
 
     # 渲染頂部總覽
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "🏆 零成本"
@@ -121,7 +127,7 @@ def dashboard_fragment():
     <div class="metro-box" style="border-left: 4px solid #4ade80; padding: 15px;">
         <div class="top-summary-grid">
             <div><div class="label-text">投入本金 <span style='font-weight:normal; font-size:0.7rem;'>({START_DATE_STR[5:]})</span></div><div class="value-text">{auto_p_display}</div></div>
-            <div><div class="label-text">預估今日入帳</div><div class="value-text" style="color:#4ade80;">+${data.get("realized_payout", 0):.2f}</div></div>
+            <div><div class="label-text">浮動配息預估</div><div class="value-text" style="color:#4ade80;">+${data.get("floating_payout", 0):.2f}</div></div>
             <div><div class="label-text">歷史總收益</div><div class="value-text" style="color:#4ade80;">+${data.get("history", 0):,.2f}</div></div>
         </div>
         <div style="border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 5px; padding-top: 10px;">
@@ -209,8 +215,10 @@ def dashboard_fragment():
     with tab_loans:
         st.markdown("<h5 style='color:#4ade80; font-size:0.85rem; margin-top:5px; margin-bottom:10px;'>🟢 已成交借出明細 (點擊標題排序)</h5>", unsafe_allow_html=True)
         if data.get('loans'):
+            # 確保不會渲染到用來內部排序的隱藏欄位 "_sort_sec"
+            df_loans = pd.DataFrame(data['loans']).drop(columns=['_sort_sec'], errors='ignore')
             st.dataframe(
-                data['loans'],
+                df_loans,
                 column_config={
                     "金額 (USD)": st.column_config.NumberColumn(format="$ %d"),
                     "年化 (%)": st.column_config.NumberColumn(format="%.2f %%"),
