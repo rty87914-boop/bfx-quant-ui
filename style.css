@@ -10,7 +10,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"] { display: none !important; }
 
-/* 刷新按鈕精緻化 (不再是一整條) */
+/* 刷新按鈕精緻化 */
 .stButton > button {
     width: auto !important;
     padding: 4px 16px !important;
@@ -57,7 +57,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .status-card { background: #0b0e11; border-radius: 6px; padding: 16px 12px; border: 1px solid #2b3139; transition: background 0.2s; }
 .status-card:hover { background: #1e2329; }
 
-/* 交易所標準列表排版 (左右對齊，絕不換行) */
+/* 交易所標準列表排版 */
 .okx-list-item {
     display: flex;
     justify-content: space-between;
@@ -69,7 +69,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .okx-list-value { color: #eaecef; font-size: 0.9rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; text-align: right; }
 
 /* =========================================
-   卡片牆專屬佈局 (嚴格的單行拼接)
+   卡片牆專屬佈局
 ========================================= */
 .okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 10px; }
 .okx-item-card { 
@@ -88,6 +88,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .tag-green { color: #0ecb81; background: rgba(14, 203, 129, 0.1); border: 1px solid rgba(14, 203, 129, 0.2); }
 .tag-yellow { color: #fcd535; background: rgba(252, 213, 53, 0.1); border: 1px solid rgba(252, 213, 53, 0.2); }
 .tag-red { color: #f6465d; background: rgba(246, 70, 93, 0.1); border: 1px solid rgba(246, 70, 93, 0.2); }
+.tag-gray { color: #848e9c; background: rgba(132, 142, 156, 0.1); border: 1px solid rgba(132, 142, 156, 0.2); }
 .okx-card-amt { font-size: 1.15rem; font-weight: 600; color: #eaecef; font-family: 'JetBrains Mono', monospace; }
 
 /* ETF 對標四宮格 */
@@ -96,6 +97,21 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .etf-card:hover { border-color: #474d57; background: #1e2329; }
 .etf-title { font-size: 0.8rem; color: #848e9c; margin-bottom: 8px; font-weight: 500;}
 .etf-rate { font-size: 1.3rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #eaecef; }
+
+/* 底部狀態列標籤 */
+.footer-tag {
+    display: inline-block;
+    color: #848e9c;
+    font-size: 0.8rem;
+    background: #0b0e11;
+    border: 1px solid #2b3139;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-right: 10px;
+    margin-top: 10px;
+}
+.footer-tag span { color: #eaecef; font-weight: 500; }
+.footer-tag.alert span { color: #f6465d; }
 
 /* 隱藏預設元件，美化版面 */
 header, footer {visibility: hidden;} .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 1100px;}
