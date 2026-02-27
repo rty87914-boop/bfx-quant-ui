@@ -35,20 +35,34 @@ try:
 except FileNotFoundError:
     logger.warning("找不到 style.css，請確認檔案位置。")
 
-# ================= 3. 資料獲取 =================
-async def fetch_cached_data() -> dict:
-    if not SUPABASE_URL or not SUPABASE_KEY: return {}
+# ================= 3. 資料獲取引擎 (雙管齊下) =================
+async def fetch_cached_data(session) -> dict:
+    if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.1", headers=headers, timeout=5) as res:
-                if res.status == 200:
-                    data = await res.json()
-                    if data and len(data) > 0:
-                        st.session_state.last_update = data[0].get('updated_at', '未知時間')
-                        return data[0].get('payload', {})
-    except Exception as e: logger.error(f"UI Fetch Error: {e}")
+        async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.1", headers=headers, timeout=5) as res:
+            if res.status == 200:
+                data = await res.json()
+                if data and len(data) > 0:
+                    st.session_state.last_update = data[0].get('updated_at', '未知時間')
+                    return data[0].get('payload', {})
+    except Exception as e: logger.error(f"Cache Fetch Error: {e}")
     return {}
+
+async def fetch_bot_decisions(session) -> list:
+    if not SUPABASE_URL: return []
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        # 抓取最近 100 筆機器人決策紀錄
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,bot_amount,bot_period&order=created_at.desc&limit=100", headers=headers, timeout=5) as res:
+            if res.status == 200:
+                return await res.json()
+    except Exception as e: logger.error(f"Decisions Fetch Error: {e}")
+    return []
+
+async def fetch_all_data():
+    async with aiohttp.ClientSession() as session:
+        return await asyncio.gather(fetch_cached_data(session), fetch_bot_decisions(session))
 
 # ================= 4. UI 渲染邏輯 =================
 if not SUPABASE_URL: 
@@ -62,7 +76,6 @@ with st.sidebar:
     display_time = st.session_state.last_update.replace("T", " ")[:19] if "T" in st.session_state.last_update else st.session_state.last_update
     st.markdown(f"<div style='color:#7a808a; font-size:0.85rem;'>資料庫最後同步:<br><span style='color:#ffffff;'>{display_time}</span></div>", unsafe_allow_html=True)
 
-# 頂部導航列 
 c_title, c_btn = st.columns([10, 2], vertical_alignment="bottom")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:2rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -71,7 +84,8 @@ with c_btn:
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
-    data = asyncio.run(fetch_cached_data())
+    # 同步拉取核心快取與側錄數據
+    data, decisions = asyncio.run(fetch_all_data())
     
     if not data:
         st.warning("尚未取得後端引擎的資料。")
@@ -88,7 +102,8 @@ def dashboard_fragment():
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "--"
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">當前淨年化</div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers = st.tabs(["策略表現", "活躍借出", "排隊掛單"])
+    # 3. 頁籤區域 (新增第 4 頁籤：歸因分析)
+    tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["策略表現", "活躍借出", "排隊掛單", "🤖 歸因分析"])
 
     with tab_main:
         current_apy = data.get('hist_apy', 0) if data.get('auto_p', 0) > 0 else data.get('stats', {}).get('overall', {}).get('true_apy', 0)
@@ -120,7 +135,6 @@ def dashboard_fragment():
         else:
             st.markdown(f"""<div class='okx-panel'><div class='okx-list-item border-bottom'><div class='okx-list-label'>真實等效年化 (True APY)</div><div class='okx-list-value text-green' style='font-size:1.4rem;'>{o_stat.get('true_apy', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均毛年化</div><div class='okx-list-value'>{o_stat.get('gross_rate', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均撮合耗時</div><div class='okx-list-value'>{o_stat.get('wait', 0):.1f} h</div></div><div class='okx-list-item'><div class='okx-list-label'>平均存活時間</div><div class='okx-list-value'>{o_stat.get('survive', 0):.1f} h</div></div></div>""", unsafe_allow_html=True)
 
-        # 【搬移完成】AI 策略分析引擎改至此處
         st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>策略分析引擎</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
 
     with tab_loans:
@@ -128,7 +142,6 @@ def dashboard_fragment():
         if not loans_data:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無活躍借出合約</div>", unsafe_allow_html=True)
         else:
-            # 活躍單專屬統整儀表板 (安全降級防護)
             total_loan_amt = sum(l.get('金額', l.get('金額 (USD)', 0)) for l in loans_data)
             total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
             loan_count = len(loans_data)
@@ -137,7 +150,6 @@ def dashboard_fragment():
             summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總借出金額</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">${total_loan_amt:,.2f}</div></div><div><div class="okx-label">活躍合約數</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{loan_count} <span style="font-size:0.9rem; color:#7a808a;">筆</span></div></div><div><div class="okx-label">加權年化</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{avg_apr:.2f}%</div></div><div><div class="okx-label">預估總日收</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">${total_daily_profit:.2f}</div></div></div>"""
             st.markdown(summary_html, unsafe_allow_html=True)
 
-            # 卡片牆 (加入 .get 安全讀取)
             cards_html = "<div class='okx-card-grid'>"
             for l in loans_data:
                 amt = l.get('金額', l.get('金額 (USD)', 0))
@@ -155,7 +167,6 @@ def dashboard_fragment():
         if not offers_data:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無排隊中掛單</div>", unsafe_allow_html=True)
         else:
-            # 掛單專屬統整儀表板 (安全降級防護)
             total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
             offer_count = len(offers_data)
             stuck_count = data.get('stuck_offers_count', 0)
@@ -163,7 +174,6 @@ def dashboard_fragment():
             summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總排隊金額</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">${total_offer_amt:,.2f}</div></div><div><div class="okx-label">排隊掛單數</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{offer_count} <span style="font-size:0.9rem; color:#7a808a;">筆</span></div></div><div><div class="okx-label">匹配滯緩</div><div class="okx-value {'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.3rem;">{stuck_count} <span style="font-size:0.9rem; color:#7a808a;">筆</span></div></div></div>"""
             st.markdown(summary_html, unsafe_allow_html=True)
 
-            # 卡片牆 (加入 .get 安全讀取)
             cards_html = "<div class='okx-card-grid'>"
             for o in offers_data:
                 status_raw = o.get('狀態', '')
@@ -180,7 +190,56 @@ def dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 4. 底部系統監控列
+    # 4. 歸因分析頁籤 (全新加入)
+    with tab_analytics:
+        if not decisions:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫正在收集決策樣本，請稍後...</div>", unsafe_allow_html=True)
+        else:
+            df = pd.DataFrame(decisions)
+            
+            # 確保欄位存在且進行時區轉換
+            if 'created_at' in df.columns:
+                df['時間'] = pd.to_datetime(df['created_at']).dt.tz_convert('Asia/Taipei')
+            else:
+                df['時間'] = pd.Series(range(len(df)))
+
+            if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
+                df['表面FRR (紅)'] = df['market_frr']
+                df['機器人報價 (綠)'] = df['bot_rate_yearly']
+                
+                # 計算策略指標
+                premium_count = len(df[df['bot_rate_yearly'] >= df['market_frr']])
+                win_rate = (premium_count / len(df)) * 100 if len(df) > 0 else 0
+                avg_spread = (df['bot_rate_yearly'] - df['market_frr']).mean()
+
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:20px 0 12px 0;'>策略智商評估 (對標 FRR)</div>", unsafe_allow_html=True)
+                
+                summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">溢價捕捉率 (勝率)</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate:.1f}%</div></div><div><div class="okx-label">平均超額報酬 (Alpha)</div><div class="okx-value {'text-green' if avg_spread >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread:+.2f}%</div></div><div><div class="okx-label">分析樣本數</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{len(df)} <span style="font-size:0.9rem; color:#7a808a;">筆</span></div></div></div>"""
+                st.markdown(summary_html, unsafe_allow_html=True)
+                
+                # 繪製雷達散佈圖 (純黑背景，紅色對比螢光綠)
+                st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊圖例可開關)</div>", unsafe_allow_html=True)
+                df_chart = df.set_index('時間')[['表面FRR (紅)', '機器人報價 (綠)']]
+                st.scatter_chart(df_chart, color=["#ff4d4f", "#b2ff22"], height=300)
+                
+                # 近期決策明細表
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:30px 0 12px 0;'>機器人操作日誌 (近期 10 筆)</div>", unsafe_allow_html=True)
+                cards_html = "<div class='okx-card-grid'>"
+                for _, row in df.head(10).iterrows():
+                    amt = row.get('bot_amount', 0)
+                    bot_rate = row.get('bot_rate_yearly', 0)
+                    frr = row.get('market_frr', 0)
+                    time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
+                    
+                    spread = bot_rate - frr
+                    tag_class = "tag-green" if spread >= 0 else "tag-red"
+                    spread_str = f"+{spread:.2f}%" if spread >= 0 else f"{spread:.2f}%"
+                    
+                    cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_str}</span><span class='okx-card-amt'>${amt:,.2f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>機器人報價</span><span class='okx-list-value okx-value-mono'>{bot_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>當時 FRR</span><span class='okx-list-value okx-value-mono'>{frr:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>決策時間</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{time_str}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
+
+    # 5. 底部系統監控列
     st.markdown("<hr style='border-color: #1a1d24; margin:40px 0 20px 0;'>", unsafe_allow_html=True)
     
     is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
