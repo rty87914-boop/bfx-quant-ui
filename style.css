@@ -1,51 +1,103 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
-html, body, [data-testid="stAppViewContainer"] { background-color: #00080c !important; }
-.stApp { background: radial-gradient(circle at 50% 50%, #001a1a 0%, #002b36 40%, #000000 100%) !important; background-attachment: fixed; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+/* 全局 OKX 級暗色背景 */
+html, body, [data-testid="stAppViewContainer"], .stApp { 
+    background-color: #0b0e11 !important; 
+    background-image: none !important;
+    font-family: 'Inter', 'PingFang TC', sans-serif !important;
+}
+
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"] { display: none !important; }
 
-/* 頂部控制按鈕 */
-.top-refresh-btn > button { border-color: #4ade80 !important; color: #4ade80 !important; font-weight: bold; background: rgba(74,222,128,0.05); padding: 8px !important; }
-.top-refresh-btn > button:hover { background: rgba(74,222,128,0.2) !important; box-shadow: 0 0 10px rgba(74,222,128,0.3); }
+/* 頂部按鈕微交互 */
+.top-refresh-btn > button { 
+    border: 1px solid #2b3139 !important; 
+    color: #eaecef !important; 
+    background: #181a20 !important; 
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+.top-refresh-btn > button:hover { 
+    background: #2b3139 !important; 
+    border-color: #474d57 !important;
+    transform: translateY(-1px);
+}
 
-/* 卡片容器 */
-.metro-box { background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(20px); border: 1px solid rgba(74, 222, 128, 0.15); border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.03); display: flex; flex-direction: column; position: relative; z-index: 1; transition: transform 0.2s; }
-.metro-box:hover { border-color: rgba(74, 222, 128, 0.3); }
+/* OKX 風格標準面板 (取代原有的 metro-box) */
+.okx-panel { 
+    background: #181a20; 
+    border: 1px solid #2b3139; 
+    border-radius: 12px; 
+    padding: 20px; 
+    margin-bottom: 20px; 
+    transition: border-color 0.2s ease;
+}
+.okx-panel:hover { border-color: #474d57; }
 
-/* 頂部三大指標 (自適應) */
-.top-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px; }
+/* 標題與數值字體 (乾淨、銳利) */
+.okx-label { color: #848e9c; font-size: 0.8rem; margin-bottom: 4px; font-weight: 500; }
+.okx-value { color: #eaecef; font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.okx-subtext { color: #5e6673; font-size: 0.75rem; margin-top: 4px; }
 
-/* 狀態列 (四等分自適應) */
-.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.status-card { background: rgba(255, 255, 255, 0.02); border-radius: 8px; padding: 12px 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; }
-.status-card:hover { background: rgba(255, 255, 255, 0.06); }
+/* 狀態色彩 */
+.text-green { color: #0ecb81 !important; }
+.text-red { color: #f6465d !important; }
+.text-yellow { color: #fcd535 !important; }
 
-/* ETF 對標四宮格 */
-.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
-.etf-card { padding: 12px 5px; border-radius: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); cursor: default;}
-.etf-card:hover { transform: translateY(-3px); box-shadow: 0 5px 20px rgba(0,0,0,0.4) !important; filter: brightness(1.1); }
-.etf-title { font-size: 0.75rem; color: #8899a6; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.etf-rate { font-size: 1.4rem; font-family: 'Orbitron', sans-serif; font-weight: bold; color: #fff; }
-.etf-spread { font-size: 0.7rem; margin-top: 5px; font-weight: bold; }
+/* 頂部三大指標網格 */
+.top-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 12px; }
 
-/* 綜合表現雙拼扁平化 */
-.perf-container { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; padding: 10px 5px; }
-.perf-left { flex: 1; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; }
-.perf-right { flex: 1.2; padding-left: 20px; font-size: 0.85rem; line-height: 1.8; color: #ccc; text-align: left; }
-@media (max-width: 400px) { .perf-right { padding-left: 10px; font-size: 0.75rem; } .etf-rate { font-size: 1.2rem; } }
+/* 狀態列網格 */
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.status-card { background: #0b0e11; border-radius: 8px; padding: 16px 12px; text-align: center; border: 1px solid #2b3139; transition: background 0.2s; }
+.status-card:hover { background: #1e2329; }
 
-/* 文字共用 */
-.label-text { color: #8899a6; font-size: 0.8rem; margin-bottom: 5px; font-weight: bold; }
-.value-text { color: #4ade80; font-size: 1.4rem; font-weight: 700; font-family: 'Orbitron', sans-serif; text-shadow: 0 0 15px rgba(74, 222, 128, 0.3); }
-.sub-text { color: #8899a6; font-size: 0.7rem; margin-top: 5px; }
+/* =========================================
+   卡片牆專屬佈局 (取代原生 Table)
+========================================= */
+.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 10px; }
+.okx-item-card { 
+    background: #0b0e11; 
+    border: 1px solid #2b3139; 
+    border-radius: 10px; 
+    padding: 16px; 
+    display: flex; 
+    flex-direction: column; 
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.okx-item-card:hover {
+    transform: translateY(-3px);
+    border-color: #474d57;
+    background: #181a20;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+/* 卡片頭部 (標籤 + 金額) */
+.okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2b3139; padding-bottom: 12px; margin-bottom: 12px; }
+.okx-tag { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.5px; }
+.tag-green { color: #0ecb81; background: rgba(14, 203, 129, 0.1); border: 1px solid rgba(14, 203, 129, 0.2); }
+.tag-yellow { color: #fcd535; background: rgba(252, 213, 53, 0.1); border: 1px solid rgba(252, 213, 53, 0.2); }
+.tag-red { color: #f6465d; background: rgba(246, 70, 93, 0.1); border: 1px solid rgba(246, 70, 93, 0.2); }
+.okx-card-amt { font-size: 1.1rem; font-weight: 700; color: #eaecef; font-family: 'JetBrains Mono', monospace; }
 
-/* 動畫與掃描器 */
-@keyframes alarm-pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.6); } 70% { box-shadow: 0 0 15px 10px rgba(239, 68, 68, 0); border-color: rgba(239, 68, 68, 0.2); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-.idle-pulse { animation: alarm-pulse 2s infinite !important; background: rgba(239, 68, 68, 0.1) !important; border-color: rgba(239, 68, 68, 0.4) !important;}
-.ai-scanner-wrapper { position:absolute; top:0; left:0; width:100%; height:100%; overflow:hidden; border-radius:12px; pointer-events:none; z-index: 0; }
-@keyframes ai-scan { 0% { top: -20%; opacity: 0; } 10% { opacity: 0.8; } 90% { opacity: 0.8; } 100% { top: 120%; opacity: 0; } }
-.ai-scanner-line { position: absolute; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, #f97316, transparent); box-shadow: 0 0 15px #f97316; animation: ai-scan 3s cubic-bezier(0.4, 0, 0.2, 1) infinite; z-index: 0; }
+/* 卡片身體 (數據列) */
+.okx-card-body { display: flex; justify-content: space-between; align-items: center; }
+.okx-card-col { display: flex; flex-direction: column; gap: 4px; }
+.okx-card-col.text-right { text-align: right; }
+.okx-card-col.text-center { text-align: center; }
 
-header, footer {visibility: hidden;} .block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important;}
+/* ETF 對標四宮格 (優化版) */
+.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px; }
+.etf-card { background: #0b0e11; padding: 16px 12px; border-radius: 10px; text-align: center; border: 1px solid #2b3139; transition: all 0.2s ease;}
+.etf-card:hover { border-color: #474d57; background: #1e2329; }
+.etf-title { font-size: 0.8rem; color: #848e9c; margin-bottom: 8px; }
+.etf-rate { font-size: 1.3rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #eaecef; }
+.etf-spread { font-size: 0.75rem; margin-top: 8px; font-weight: 600; padding: 2px 0; border-radius: 4px;}
+
+/* 隱藏預設元件，美化版面 */
+header, footer {visibility: hidden;} 
+.block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important; max-width: 1200px;}
 [data-testid="stTabs"] { margin-top: 10px; }
+[data-testid="stTabs"] button { color: #848e9c !important; font-weight: 600; }
+[data-testid="stTabs"] button[aria-selected="true"] { color: #eaecef !important; border-bottom-color: #0ecb81 !important; }
