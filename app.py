@@ -1,12 +1,13 @@
 import streamlit as st
 import aiohttp
 import asyncio
-from datetime import timedelta
+import pandas as pd
+from datetime import timedelta, datetime
 import logging
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(
-    page_title="Bitfinex 投資監控儀表板", 
+    page_title="Bitfinex 量化終端", 
     page_icon="📊", 
     layout="wide", 
     initial_sidebar_state="collapsed"
@@ -22,7 +23,6 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 60
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
-if 'initial_toast_shown' not in st.session_state: st.session_state.initial_toast_shown = False
 
 # ================= 2. 視覺風格定義 =================
 _ = st.components.v1.html("""<script>
@@ -35,12 +35,13 @@ try:
 except FileNotFoundError:
     logger.warning("找不到 style.css，請確認檔案位置。")
 
-# ================= 3. 資料獲取 =================
+# ================= 3. 資料獲取 (純讀取快取) =================
 async def fetch_cached_data() -> dict:
     if not SUPABASE_URL or not SUPABASE_KEY: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         async with aiohttp.ClientSession() as session:
+            # 只讀取我們後端引擎準備好在 id=1 的那包整理好的 payload
             async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.1", headers=headers, timeout=5) as res:
                 if res.status == 200:
                     data = await res.json()
@@ -60,8 +61,9 @@ with st.sidebar:
     st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分", 120:"2分", 300:"5分"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
     
     st.markdown("<hr style='border-color: #2b3139; margin:15px 0;'>", unsafe_allow_html=True)
+    
     display_time = st.session_state.last_update.replace("T", " ")[:19] if "T" in st.session_state.last_update else st.session_state.last_update
-    st.markdown(f"<div style='color:#848e9c; font-size:0.75rem;'>背景引擎最後同步:<br><span style='color:#eaecef;'>{display_time}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='color:#848e9c; font-size:0.8rem;'>引擎最後同步時間:<br><span style='color:#eaecef;'>{display_time}</span></div>", unsafe_allow_html=True)
 
 c_title, c_btn = st.columns([5, 1])
 with c_title:
@@ -81,26 +83,26 @@ def dashboard_fragment():
         
     # 微交互：Toast 輕量通知 (取代擋畫面的 Spinner)
     time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
-    st.toast(f"⚡ 數據已同步至最新 ({time_str})", icon="✅")
+    st.toast(f"⚡ 數據同步成功 ({time_str})", icon="✅")
 
-    # 1. 頂部狀態與 AI 洞察 (OKX 風格警告框)
+    # 1. 頂部狀態與 AI 診斷 (將標題改為正式金融術語「AI 診斷與策略分析」)
     is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
     spoof_color = "#f6465d" if is_spoofed else "#0ecb81"
     spoof_bg = "rgba(246, 70, 93, 0.1)" if is_spoofed else "rgba(14, 203, 129, 0.1)"
     spoof_text = "🚨 市場 FRR 虛標警告" if is_spoofed else "🛡️ 市場利率結構健康"
 
     st.markdown(f'''
-    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:15px; margin-bottom: 15px;'>
-        <div style='color:{spoof_color}; font-size:0.8rem; font-weight:600; border:1px solid {spoof_color}; padding:4px 10px; border-radius:6px; background:{spoof_bg};'>
-            {spoof_text} (FRR: {data.get('market_frr', 0):.1f}% / 基準: {data.get('market_twap', 0):.1f}%)
+    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:15px; margin-bottom: 20px;'>
+        <div style='color:{spoof_color}; font-size:0.85rem; font-weight:600; border:1px solid {spoof_color}; padding:6px 12px; border-radius:6px; background:{spoof_bg};'>
+            {spoof_text} (FRR: {data.get('market_frr', 0):.1f}% / 真實成交基準: {data.get('market_twap', 0):.1f}%)
         </div>
-        <div style='color:#848e9c; font-size:0.8rem;'>
-            🕵️ 引擎側錄捕獲：<span style='color:#eaecef;'>{data.get('logged_decisions_count', 0)} 筆</span>
+        <div style='color:#848e9c; font-size:0.85rem;'>
+            🕵️ 策略側錄捕獲：<span style='color:#eaecef; font-weight:600;'>{data.get('logged_decisions_count', 0)} 筆決策</span>
         </div>
     </div>
     
     <div class="okx-panel" style="border-left: 4px solid #fcd535;">
-        <div style="color: #fcd535; font-weight: 600; font-size: 0.85rem; margin-bottom: 8px;">🤖 總經理分析快報</div>
+        <div style="color: #fcd535; font-weight: 600; font-size: 0.9rem; margin-bottom: 10px;">🤖 AI 診斷與策略分析</div>
         <div style="color: #eaecef; font-size: 0.85rem; line-height: 1.6;">{data.get('ai_insight_stored', '讀取中...')}</div>
     </div>
     ''', unsafe_allow_html=True)
@@ -110,49 +112,49 @@ def dashboard_fragment():
     st.markdown(f'''
     <div class="okx-panel">
         <div class="top-summary-grid">
-            <div><div class="okx-label">投入本金 ({START_DATE_STR[5:]})</div><div class="okx-value">{auto_p_display}</div></div>
+            <div><div class="okx-label">合約投入本金 ({START_DATE_STR[5:]})</div><div class="okx-value">{auto_p_display}</div></div>
             <div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green">+${data.get("today_profit", 0):.2f}</div></div>
-            <div><div class="okx-label">歷史總收益</div><div class="okx-value text-green">+${data.get("history", 0):,.2f}</div></div>
+            <div><div class="okx-label">累計總收益</div><div class="okx-value text-green">+${data.get("history", 0):,.2f}</div></div>
         </div>
-        <div style="border-top: 1px solid #2b3139; margin-top: 5px; padding-top: 15px;">
-            <div class="okx-label" style="margin-bottom:2px;">USD/USDT 聯合淨資產</div>
-            <div class="okx-value" style="font-size:1.8rem;">${data.get("total", 0):,.2f} <span style="font-size:0.8rem; color:#5e6673; font-weight:normal;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div>
+        <div style="border-top: 1px solid #2b3139; margin-top: 5px; padding-top: 20px;">
+            <div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div>
+            <div class="okx-value" style="font-size:2rem;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#5e6673; font-weight:normal;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div>
             <div class="okx-subtext">資金利用率: <span class="text-green">{100 - data.get("idle_pct", 0):.1f}%</span> (參考匯率 {data.get("fx", 32)})</div>
         </div>
     </div>''', unsafe_allow_html=True)
 
-    # 3. 四宮格狀態
-    next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "無資金"
+    # 3. 策略指標狀態
+    next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "無解鎖資金"
     st.markdown(f'''
-    <div class="okx-panel" style="padding:15px;">
+    <div class="okx-panel" style="padding:16px;">
         <div class="status-grid">
             <div class="status-card">
-                <div class="okx-label">當前淨年化</div>
-                <div class="okx-value" style="font-size:1.3rem;">{data.get("active_apr", 0):.2f}%</div>
+                <div class="okx-label">當前淨年化 (APR)</div>
+                <div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div>
             </div>
             <div class="status-card">
-                <div class="okx-label">下次配息總和</div>
-                <div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div>
-                <div class="okx-subtext">浮動未結 ${data.get('floating_payout', 0):.1f}</div>
+                <div class="okx-label">預計配息總和</div>
+                <div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div>
+                <div class="okx-subtext">未結浮動 ${data.get('floating_payout', 0):.1f}</div>
             </div>
             <div class="status-card">
-                <div class="okx-label">閒置流失比</div>
-                <div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{data.get("idle_pct", 0):.1f}%</div>
-                <div class="okx-subtext">日折損 ${data.get('daily_missed', 0):.1f}</div>
+                <div class="okx-label">資金閒置率</div>
+                <div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{data.get("idle_pct", 0):.1f}%</div>
+                <div class="okx-subtext">日折損預估 ${data.get('daily_missed', 0):.1f}</div>
             </div>
             <div class="status-card">
-                <div class="okx-label">最近解鎖預測</div>
-                <div class="okx-value" style="font-size:1.3rem;">{next_repay_str}</div>
+                <div class="okx-label">最近合約到期</div>
+                <div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div>
             </div>
         </div>
     </div>''', unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers = st.tabs(["📊 策略對標", "🟢 活躍借出卡片", "⏳ 排隊掛單卡片"])
+    tab_main, tab_loans, tab_offers = st.tabs(["📊 策略表現對標", "🟢 活躍借出卡片", "⏳ 排隊掛單卡片"])
 
     with tab_main:
         current_apy = data.get('hist_apy', 0) if data.get('auto_p', 0) > 0 else data.get('stats', {}).get('overall', {}).get('true_apy', 0)
-        st.markdown("<h5 style='color:#eaecef; font-weight:600; font-size:0.9rem; margin:10px 0;'>🇹🇼 台股 ETF 對標矩陣</h5>", unsafe_allow_html=True)
-        etf_data = [{"name": "Bitfinex 量化", "rate": current_apy, "is_base": True}, {"name": "0056 元大", "rate": 7.50}, {"name": "00878 國泰", "rate": 7.00}, {"name": "00713 低波", "rate": 8.00}]
+        st.markdown("<h5 style='color:#eaecef; font-weight:600; font-size:0.95rem; margin:15px 0;'>🇹🇼 台股 ETF 對標矩陣</h5>", unsafe_allow_html=True)
+        etf_data = [{"name": "Bitfinex 量化策略", "rate": current_apy, "is_base": True}, {"name": "0056 元大高股息", "rate": 7.50}, {"name": "00878 國泰高股息", "rate": 7.00}, {"name": "00713 元大低波", "rate": 8.00}]
         max_rate = max([item["rate"] for item in etf_data])
 
         grid_html = "<div class='etf-grid'>"
@@ -173,27 +175,27 @@ def dashboard_fragment():
             <div class='etf-card' style='background:{bg_color}; border: 1px solid {b_color};'>
                 <div class='etf-title'>{"👑 " if is_winner else ""}{item['name']}</div>
                 <div class='etf-rate'>{item['rate']:.2f}%</div>
-                <div class='etf-spread' style='color:{sub_col}; background:{sub_bg}; display:inline-block; padding: 2px 8px;'>{sub_txt}</div>
+                <div class='etf-spread' style='color:{sub_col}; background:{sub_bg};'>{sub_txt}</div>
             </div>'''
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
         o_stat = data.get('stats', {}).get('overall', {})
-        st.markdown("<h5 style='color:#eaecef; font-weight:600; font-size:0.9rem; margin:20px 0 10px 0;'>📈 機器人微觀效能</h5>", unsafe_allow_html=True)
+        st.markdown("<h5 style='color:#eaecef; font-weight:600; font-size:0.95rem; margin:25px 0 15px 0;'>✅ 策略綜合績效數據 (基於真實回測)</h5>", unsafe_allow_html=True)
         if o_stat.get("is_empty"): 
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c;'>📭 需等待首批資金循環完成</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c;'>⏳ 等待首個合約循環完成數據收集</div>", unsafe_allow_html=True)
         else:
             st.markdown(f'''
-            <div class='okx-panel' style='padding: 15px;'>
+            <div class='okx-panel' style='padding: 18px;'>
                 <div class='perf-container'>
                     <div class='perf-left'>
                         <div class='okx-label'>真實等效年化 (True APY)</div>
-                        <div class='okx-value text-green' style='font-size:2rem;'>{o_stat.get('true_apy', 0):.2f}%</div>
+                        <div class='okx-value text-green' style='font-size:2.2rem;'>{o_stat.get('true_apy', 0):.2f}%</div>
                     </div>
                     <div class='perf-right' style='color:#eaecef;'>
-                        <div style='margin-bottom:6px;'><span style='color:#848e9c; display:inline-block; width:70px;'>🎯 均毛利</span> {o_stat.get('gross_rate', 0):.2f}%</div>
-                        <div style='margin-bottom:6px;'><span style='color:#848e9c; display:inline-block; width:70px;'>⏳ 均等待</span> {o_stat.get('wait', 0):.1f} 小時</div>
-                        <div><span style='color:#848e9c; display:inline-block; width:70px;'>🛡️ 均存活</span> {o_stat.get('survive', 0):.1f} 小時</div>
+                        <div style='margin-bottom:8px;'><span style='color:#848e9c; display:inline-block; width:100px;'>🎯 平均毛年化：</span> {o_stat.get('gross_rate', 0):.2f}%</div>
+                        <div style='margin-bottom:8px;'><span style='color:#848e9c; display:inline-block; width:100px;'>⏳ 平均撮合：</span> {o_stat.get('wait', 0):.1f} 小時</div>
+                        <div><span style='color:#848e9c; display:inline-block; width:100px;'>🛡️ 平均展期：</span> {o_stat.get('survive', 0):.1f} 小時</div>
                     </div>
                 </div>
             </div>''', unsafe_allow_html=True)
@@ -201,29 +203,33 @@ def dashboard_fragment():
     with tab_loans:
         loans_data = data.get('loans', [])
         if not loans_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 30px;'>💸 目前無活躍借出單</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 40px;'>💸 目前無活躍狀態借出合約</div>", unsafe_allow_html=True)
         else:
-            # 將資料轉換為動態 HTML 卡片牆
-            cards_html = "<div class='okx-card-grid'>"
+            # 修正文字跑版與佈局跑版
+            cards_html = "<div class='okx-card-grid'><div style='display:none;'></div>"
             for l in loans_data:
                 cards_html += f"""
                 <div class='okx-item-card'>
                     <div class='okx-card-header'>
-                        <span class='okx-tag tag-green'>活躍中</span>
+                        <span class='okx-tag tag-green'>活躍借出</span>
                         <span class='okx-card-amt'>${l['金額 (USD)']:,.2f}</span>
                     </div>
                     <div class='okx-card-body'>
                         <div class='okx-card-col'>
-                            <span class='okx-label'>年化</span>
-                            <span class='okx-value text-green' style='font-size:1.1rem;'>{l['年化 (%)']:.2f}%</span>
+                            <span class='okx-label'>淨年化 (%)</span>
+                            <span class='okx-value text-green'>{l['年化 (%)']:.2f}%</span>
                         </div>
-                        <div class='okx-card-col text-center'>
-                            <span class='okx-label'>日收</span>
-                            <span class='okx-value' style='font-size:1.1rem;'>${l['預估日收']:.2f}</span>
+                        <div class='okx-card-col text-right'>
+                            <span class='okx-label'>預估日收</span>
+                            <span class='okx-value'>${l['預估日收']:.2f}</span>
+                        </div>
+                        <div class='okx-card-col'>
+                            <span class='okx-label'>出借時間</span>
+                            <span class='okx-value' style='font-size:0.95rem; color:#eaecef;'>{l['出借時間']}</span>
                         </div>
                         <div class='okx-card-col text-right'>
                             <span class='okx-label'>到期時間</span>
-                            <span class='okx-value' style='font-size:0.9rem; color:#848e9c;'>{l['到期時間']}</span>
+                            <span class='okx-value text-red' style='font-size:0.95rem;'>{l['到期時間']}</span>
                         </div>
                     </div>
                 </div>
@@ -234,14 +240,15 @@ def dashboard_fragment():
     with tab_offers:
         offers_data = data.get('offers', [])
         if not offers_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 30px;'>✨ 目前無排隊中掛單</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#848e9c; padding: 40px;'>✨ 目前無排隊中掛單</div>", unsafe_allow_html=True)
         else:
-            cards_html = "<div class='okx-card-grid'>"
+            # 優化掛單語意用語
+            cards_html = "<div class='okx-card-grid'><div style='display:none;'></div>"
             for o in offers_data:
-                status = o['狀態']
-                tag_class = "tag-yellow" if "媒合中" in status else ("tag-green" if "換倉" in status else "tag-red")
-                # 簡化標籤文字
-                short_status = "媒合中" if "媒合" in status else ("剛掛出" if "換倉" in status else "卡單滯銷")
+                # 將「卡單滯銷」改為專業用語「匹配滯緩」
+                status_raw = o['狀態']
+                short_status = "匹配滯緩" if "卡單" in status_raw else ("合約展期" if "換倉" in status_raw else "訂單撮合中")
+                tag_class = "tag-red" if "卡單" in status_raw else ("tag-green" if "換倉" in status_raw else "tag-yellow")
                 
                 cards_html += f"""
                 <div class='okx-item-card'>
@@ -251,16 +258,20 @@ def dashboard_fragment():
                     </div>
                     <div class='okx-card-body'>
                         <div class='okx-card-col'>
-                            <span class='okx-label'>報價</span>
+                            <span class='okx-label'>報價 (年化)</span>
                             <span class='okx-value' style='font-size:1.1rem;'>{o['毛年化']}</span>
                         </div>
-                        <div class='okx-card-col text-center'>
-                            <span class='okx-label'>天期</span>
-                            <span class='okx-value' style='font-size:1.1rem;'>{o['掛單天期']}</span>
+                        <div class='okx-card-col text-right'>
+                            <span class='okx-label'>合約天期</span>
+                            <span class='okx-value'>{o['掛單天期']}</span>
+                        </div>
+                        <div class='okx-card-col'>
+                            <span class='okx-label'>已排隊時長</span>
+                            <span class='okx-value' style='color:#848e9c;'>{o['排隊時間']}</span>
                         </div>
                         <div class='okx-card-col text-right'>
-                            <span class='okx-label'>已排隊</span>
-                            <span class='okx-value' style='font-size:0.9rem; color:#848e9c;'>{o['排隊時間']}</span>
+                            <span class='okx-label'>排隊狀態</span>
+                            <span class='okx-value text-yellow' style='font-size:0.95rem; line-height:1.2; font-weight:500;'>{status_raw}</span>
                         </div>
                     </div>
                 </div>
