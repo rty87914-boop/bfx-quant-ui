@@ -62,7 +62,6 @@ with st.sidebar:
     display_time = st.session_state.last_update.replace("T", " ")[:19] if "T" in st.session_state.last_update else st.session_state.last_update
     st.markdown(f"<div style='color:#7a808a; font-size:0.85rem;'>資料庫最後同步:<br><span style='color:#ffffff;'>{display_time}</span></div>", unsafe_allow_html=True)
 
-# 頂部導航列 
 c_title, c_btn = st.columns([10, 2], vertical_alignment="bottom")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:2rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -80,14 +79,11 @@ def dashboard_fragment():
     time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
     st.toast(f"資料已同步 ({time_str})", icon="🟢")
 
-    # 1. AI 診斷
     st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>策略分析引擎</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
 
-    # 2. 核心資產數據 
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value" style="font-size:2.5rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
-    # 3. 策略指標狀態 
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "--"
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">當前淨年化</div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
@@ -130,7 +126,8 @@ def dashboard_fragment():
         else:
             cards_html = "<div class='okx-card-grid'>"
             for l in loans_data:
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag tag-green'>活躍中</span><span class='okx-card-amt'>${l['金額 (USD)']:,.2f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>淨年化</span><span class='okx-list-value text-green okx-value-mono'>{l['年化 (%)']:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預估日收</span><span class='okx-list-value okx-value-mono'>${l['預估日收']:.2f}</span></div><div class='okx-list-item'><span class='okx-list-label'>到期時間</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{l['到期時間']}</span></div></div>"
+                # 【修改】在金額旁邊加入幣種標示
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag tag-green'>活躍中</span><span class='okx-card-amt'>${l['金額']:,.2f} <span style='font-size:0.8rem; color:#7a808a;'>{l['幣種']}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>淨年化</span><span class='okx-list-value text-green okx-value-mono'>{l['年化 (%)']:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預估日收</span><span class='okx-list-value okx-value-mono'>${l['預估日收']:.2f}</span></div><div class='okx-list-item'><span class='okx-list-label'>到期時間</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{l['到期時間']}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -145,7 +142,8 @@ def dashboard_fragment():
                 short_status = "匹配滯緩" if "卡單" in status_raw else ("合約展期" if "換倉" in status_raw else "撮合中")
                 tag_class = "tag-red" if "卡單" in status_raw else ("tag-green" if "換倉" in status_raw else "tag-yellow")
                 
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='okx-card-amt'>${o['金額 (USD)']:,.2f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價 (年化)</span><span class='okx-list-value okx-value-mono'>{o['毛年化']}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>合約天期</span><span class='okx-list-value'>{o['掛單天期']}</span></div><div class='okx-list-item'><span class='okx-list-label'>已排隊時長</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{o['排隊時間']}</span></div></div>"
+                # 【修改】在金額旁邊加入幣種標示
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='okx-card-amt'>${o['金額']:,.2f} <span style='font-size:0.8rem; color:#7a808a;'>{o['幣種']}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價 (年化)</span><span class='okx-list-value okx-value-mono'>{o['毛年化']}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>合約天期</span><span class='okx-list-value'>{o['掛單天期']}</span></div><div class='okx-list-item'><span class='okx-list-label'>已排隊時長</span><span class='okx-list-value' style='color:#7a808a; font-weight:500;'>{o['排隊時間']}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -156,6 +154,6 @@ def dashboard_fragment():
     spoof_class = "alert" if is_spoofed else ""
     spoof_text = "FRR 溢價警告" if is_spoofed else "正常"
 
-    st.markdown(f"""<div style="margin-bottom: 20px;"><div class="footer-tag {spoof_class}">市場結構: <span>{spoof_text}</span></div><div class="footer-tag">FRR 報價: <span class="okx-value-mono">{data.get('market_frr', 0):.1f}%</span></div><div class="footer-tag">TWAP 基準: <span class="okx-value-mono">{data.get('market_twap', 0):.1f}%</span></div><div class="footer-tag">策略側錄: <span class="okx-value-mono">{data.get('logged_decisions_count', 0)}</span> 筆</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="margin-bottom: 20px;"><div class="footer-tag {spoof_class}">市場結構: <span>{spoof_text}</span></div><div class="footer-tag">綜合 FRR: <span class="okx-value-mono">{data.get('market_frr', 0):.1f}%</span></div><div class="footer-tag">綜合 TWAP: <span class="okx-value-mono">{data.get('market_twap', 0):.1f}%</span></div><div class="footer-tag">策略側錄: <span class="okx-value-mono">{data.get('logged_decisions_count', 0)}</span> 筆</div></div>""", unsafe_allow_html=True)
 
 dashboard_fragment()
