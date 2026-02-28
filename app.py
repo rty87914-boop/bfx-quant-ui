@@ -15,7 +15,8 @@ START_DATE_STR = "2026-02-11"
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
-if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 60
+# 🎯 預設改為 300 秒 (5 分鐘)
+if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
 # ================= 2. 視覺風格定義 =================
@@ -27,7 +28,7 @@ try:
     with open("style.css", "r", encoding="utf-8") as f: st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError: pass
 
-# ================= 3. 資料獲取引擎 (加入歷史資產) =================
+# ================= 3. 資料獲取引擎 =================
 async def fetch_cached_data(session) -> dict:
     if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -36,7 +37,7 @@ async def fetch_cached_data(session) -> dict:
             if res.status == 200:
                 data = await res.json()
                 if data:
-                    st.session_state.last_update = data[0].get('updated_at', '未知時間')
+                    st.session_state.last_update = data[0].get('updated_at', '尚未同步')
                     return data[0].get('payload', {})
     except Exception: pass
     return {}
@@ -63,7 +64,7 @@ async def fetch_all_data():
     async with aiohttp.ClientSession() as session:
         return await asyncio.gather(fetch_cached_data(session), fetch_bot_decisions(session), fetch_equity_history(session))
 
-# ================= 4. 智能時間轉換器 =================
+# ================= 4. 智能時間與時區轉換器 =================
 def format_time_smart(seconds):
     if not seconds or seconds >= 9999999: return "--"
     h = int(seconds // 3600)
@@ -81,49 +82,66 @@ def parse_wait_time(time_str):
         except: pass
     return time_str
 
+# 🎯 核心：轉換成精準的台灣時間 (UTC+8)
+def get_taiwan_time(utc_iso_str):
+    if not utc_iso_str or utc_iso_str == "尚未同步": return "尚未同步"
+    try:
+        dt = pd.to_datetime(utc_iso_str)
+        if dt.tz is None: dt = dt.tz_localize('UTC')
+        tw_dt = dt.tz_convert('Asia/Taipei')
+        return tw_dt.strftime('%m/%d %H:%M:%S')
+    except:
+        return str(utc_iso_str).replace("T", " ")[:19]
+
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列與 Modal 設定 (取代側邊欄)
+# 頂部導航列與 Modal 設定
 c_title, c_btn = st.columns([10, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:1.8rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
     with st.popover("⚙️"):
         st.markdown("<div style='font-weight:700; color:#fff; margin-bottom:10px;'>終端設定</div>", unsafe_allow_html=True)
-        st.session_state.refresh_rate = st.selectbox("前端刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分", 120:"2分", 300:"5分"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
-        if st.button("↻ 強制刷新資料", use_container_width=True): st.rerun()
+        st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
+        
+        tw_full_time = get_taiwan_time(st.session_state.last_update)
+        st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步時間: {tw_full_time}</div>", unsafe_allow_html=True)
+        
+        if st.button("↻ 強制刷新畫面", use_container_width=True): st.rerun()
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
     data, decisions, equity_history = asyncio.run(fetch_all_data())
     if not data: return
         
-    time_str = st.session_state.last_update.split('T')[1][:5] if 'T' in st.session_state.last_update else ""
-    st.toast(f"資料同步完成 ({time_str})", icon="🟢")
+    # 🎯 修正 Toast 推播顯示的也是台灣時間
+    tw_full_time = get_taiwan_time(st.session_state.last_update)
+    tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
+    st.toast(f"資料同步完成 ({tw_short_time})", icon="🟢")
 
     # 1. 核心資產數據 (套用 Pulse 呼吸燈動畫)
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel" style="margin-top: 15px;"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
-    # 2. 策略指標狀態 (智能天數轉換)
+    # 2. 策略指標狀態
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
-    # ================= 頁籤開始 (會被 CSS 吸到底部變成導航列) =================
+    # 底部導航列
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
-        # 📈 新增：資產淨值成長曲線
-        st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:10px 0 10px 0;'>📈 歷史資產淨值曲線</div>", unsafe_allow_html=True)
+        # 🎯 修正：圖表改為只繪製「累計收益」，完美展現向上的曲線
+        st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:10px 0 10px 0;'>📈 歷史累計收益曲線</div>", unsafe_allow_html=True)
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
-            df_eq['總資產 (USD)'] = df_eq['auto_p'] + df_eq['hist_p']
+            df_eq['累計收益 (USD)'] = df_eq['hist_p']
             df_eq['日期'] = pd.to_datetime(df_eq['record_date']).dt.strftime('%m/%d')
-            df_chart = df_eq.set_index('日期')[['總資產 (USD)']]
+            df_chart = df_eq.set_index('日期')[['累計收益 (USD)']]
             st.area_chart(df_chart, color="#b2ff22", height=180)
         else:
-            st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中，即將繪製資產曲線...</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中，即將繪製收益曲線...</div>", unsafe_allow_html=True)
 
         current_apy = data.get('stats', {}).get('overall', {}).get('true_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:20px 0 10px 0;'>📊 標竿對比 (Benchmark)</div>", unsafe_allow_html=True)
@@ -140,7 +158,6 @@ def dashboard_fragment():
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
-        # 🔮 新增：複利沙盤推演器
         st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:24px 0 10px 0;'>🔮 複利沙盤推演器</div>", unsafe_allow_html=True)
         st.markdown("<div style='color:#7a808a; font-size:0.85rem; margin-bottom:10px;'>基於當前真實等效年化，預測未來資產爆發軌跡</div>", unsafe_allow_html=True)
         years = st.slider("推演年期 (年)", 1, 5, 2, label_visibility="collapsed")
