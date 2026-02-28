@@ -211,7 +211,7 @@ def dashboard_fragment():
     with tab_analytics:
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
         spoof_class = "text-red" if is_spoofed else "text-green"
-        spoof_text = "異常 (溢價過高)" if is_spoofed else "結構健康"
+        spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
         market_html = f"""<div style="background: transparent; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; border: 1px solid #1a1d24;"><div><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.05rem;">{spoof_text}</div></div><div><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem;">{data.get('market_frr', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>"""
