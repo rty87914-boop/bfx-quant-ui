@@ -1,32 +1,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
+/* 強制暗黑模式，解決 iOS 頂部狀態列反白問題 */
+:root {
+    color-scheme: dark;
+}
+
 html, body, [data-testid="stAppViewContainer"], .stApp { 
     background-color: #000000 !important; 
     background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
 }
 
+/* 隱藏 Streamlit 原生頂部 Header 與裝飾 */
+header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
-[data-testid="stSkeleton"], [data-testid="stStatusWidget"], header, footer { display: none !important; visibility: hidden; }
+[data-testid="stSkeleton"], [data-testid="stStatusWidget"], footer { display: none !important; visibility: hidden; }
 
-/* 📱 針對手機端頂部留白進行極限壓縮 */
-.block-container { padding-top: 1rem !important; padding-bottom: 120px !important; max-width: 1100px;}
+/* 頂部空間極限壓縮 */
+.block-container { padding-top: 24px !important; padding-bottom: 120px !important; max-width: 1100px;}
 
-/* ⛔ 徹底隱藏 Streamlit 原生醜陋的標題連結圖示 */
-.stMarkdown a.header-anchor { display: none !important; }
+/* ⛔ 徹底隱藏標題的連結圖示 */
+h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, 
+[data-testid="stMarkdownContainer"] a svg { display: none !important; pointer-events: none; }
 
-/* ⚙️ 彈出式設定按鈕優化 */
+/* ⛔ 強制頂部 Header (標題與設定) 絕對水平，禁止在手機上折行 */
+div[data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+}
+
+/* ⚙️ 設定按鈕專業化 */
 [data-testid="stPopover"] { display: flex; justify-content: flex-end; }
 [data-testid="stPopover"] button {
     background: transparent !important;
-    border: none !important;
-    color: #7a808a !important;
-    font-size: 1.4rem !important;
-    padding: 0 !important;
-    transition: color 0.2s;
-    line-height: 1 !important;
+    border: 1px solid #1a1d24 !important;
+    border-radius: 6px !important;
+    color: #848e9c !important;
+    font-size: 0.9rem !important;
+    padding: 6px 14px !important;
+    transition: all 0.2s;
+    font-weight: 500 !important;
 }
-[data-testid="stPopover"] button:hover { color: #ffffff !important; }
+[data-testid="stPopover"] button:hover { color: #ffffff !important; border-color: #3b4048 !important; }
 
 /* 📱 原生 App 底部導航列 */
 div[data-testid="stTabs"] > div[role="tablist"] {
@@ -34,15 +49,14 @@ div[data-testid="stTabs"] > div[role="tablist"] {
     bottom: 0;
     left: 0;
     width: 100vw;
-    background-color: rgba(12, 14, 18, 0.90);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background-color: rgba(12, 14, 18, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     z-index: 99999;
     border-top: 1px solid #1a1d24;
     padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
     display: flex;
     justify-content: space-around;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
 }
 div[data-testid="stTabs"] > div[role="tablist"] > button {
     flex: 1;
@@ -62,14 +76,14 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 /* 🟢 呼吸燈特效 */
 @keyframes neon-pulse {
     0% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
-    50% { text-shadow: 0 0 25px rgba(178,255,34,0.8); transform: scale(1.02); color: #b2ff22;}
+    50% { text-shadow: 0 0 20px rgba(178,255,34,0.6); transform: scale(1.01); color: #b2ff22;}
     100% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
 }
-.pulse-text { animation: neon-pulse 1.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
+.pulse-text { animation: neon-pulse 1.5s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
 
 /* ⓘ 懸浮提示氣泡 */
-.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #7a808a; padding-bottom: 1px;}
-.okx-tooltip i { font-size: 0.75rem; color: #7a808a; font-style: normal; font-family: monospace; border: 1px solid #7a808a; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px;}
+.okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
 .okx-tooltip:hover::after {
     content: attr(data-tip);
     position: absolute;
@@ -91,32 +105,33 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     line-height: 1.4;
 }
 
-.okx-panel { background: #0c0e12; border-radius: 16px; padding: 24px; margin-bottom: 16px; }
-.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+/* 組件排版 */
+.okx-panel { background: #0c0e12; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #121418; }
+.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .okx-label { color: #7a808a; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500; }
 .okx-value { color: #ffffff; font-size: 1.8rem; font-weight: 700; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
 .okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; }
 .text-green { color: #b2ff22 !important; }
 .text-red { color: #ff4d4f !important; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: none; }
+.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: 1px solid #121418; }
 .okx-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
 .okx-list-item.border-bottom { border-bottom: 1px solid #1a1d24; }
 .okx-list-label { color: #7a808a; font-size: 0.9rem; font-weight: 500; }
 .okx-list-value { color: #ffffff; font-size: 1rem; font-weight: 600; text-align: right; }
 
 .okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
-.okx-item-card { background: #0c0e12; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s ease; }
-.okx-item-card:hover { transform: translateY(-2px); background: #121418; }
+.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; border: 1px solid #121418; }
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 16px; margin-bottom: 8px; }
-.okx-tag { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+.okx-tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .tag-green { color: #000000; background: #b2ff22; }
 .tag-yellow { color: #000000; background: #fcd535; }
 .tag-red { color: #ffffff; background: #ff4d4f; }
-.okx-card-amt { font-size: 1.4rem; font-weight: 700; color: #ffffff; }
+.tag-gray { color: #eaecef; background: #2b3139; }
+.okx-card-amt { font-size: 1.3rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
-.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 16px; text-align: center; border: none; }
-.etf-card-active { background: rgba(178, 255, 34, 0.05); border: 1px solid rgba(178, 255, 34, 0.3); }
+.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; }
+.etf-card-active { background: rgba(178, 255, 34, 0.03); border: 1px solid rgba(178, 255, 34, 0.2); }
 .etf-title { font-size: 0.85rem; color: #7a808a; margin-bottom: 8px; font-weight: 500;}
-.etf-rate { font-size: 1.6rem; font-weight: 700; color: #ffffff; }
+.etf-rate { font-size: 1.5rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
