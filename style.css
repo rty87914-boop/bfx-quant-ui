@@ -1,52 +1,59 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 強制暗黑模式與防滑動白邊 (解決 iOS Safari 頂部/底部露出白底的問題) */
+/* 強制暗黑模式與防滑動白邊 (徹底殺死 Safari 彈性回拉的白底) */
 :root { color-scheme: dark; }
 html, body {
     background-color: #000000 !important;
-    overscroll-behavior-y: none !important; /* 殺死 Safari 彈性回拉的白邊 */
+    overflow-x: hidden !important; /* 解決右側大片空白問題 */
+    overscroll-behavior-y: none !important; 
 }
 
 .stApp, [data-testid="stAppViewContainer"] { 
     background-color: #000000 !important; 
     background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
+    overflow-x: hidden !important;
 }
 
-/* 隱藏 Streamlit 原生頂部 Header 與裝飾 */
+/* 隱藏 Streamlit 原生頂部 Header 與底部水印 */
 header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"], footer { display: none !important; visibility: hidden; }
 
 /* 頂部空間極限壓縮 */
-.block-container { padding-top: 16px !important; padding-bottom: 120px !important; max-width: 1100px;}
+.block-container { padding-top: 16px !important; padding-bottom: 120px !important; max-width: 1100px; overflow-x: hidden;}
 
 /* ⛔ 徹底隱藏標題的連結圖示 */
 h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, 
 [data-testid="stMarkdownContainer"] a svg { display: none !important; pointer-events: none; }
 
-/* ⛔ 強制頂部 Header (標題與設定) 絕對水平，禁止在手機上折行 */
-div[data-testid="stHorizontalBlock"] {
+/* 🎯 精準控制：只讓「第一排」(標題與設定) 強制水平對齊，不影響下方卡片排版 */
+div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     align-items: center !important;
     justify-content: space-between !important;
 }
-div[data-testid="column"] { width: auto !important; flex: none !important; }
+div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    width: auto !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+}
 
 /* 設定按鈕專業化 */
-[data-testid="stPopover"] { display: flex; justify-content: flex-end; }
+[data-testid="stPopover"] { display: block; }
 [data-testid="stPopover"] button {
-    background: transparent !important;
+    background: #0c0e12 !important;
     border: 1px solid #1a1d24 !important;
     border-radius: 6px !important;
-    color: #848e9c !important;
-    font-size: 0.9rem !important;
+    color: #eaecef !important;
+    font-size: 0.85rem !important;
     padding: 6px 14px !important;
     transition: all 0.2s;
     font-weight: 500 !important;
 }
-[data-testid="stPopover"] button:hover { color: #ffffff !important; border-color: #3b4048 !important; }
+[data-testid="stPopover"] button:hover { border-color: #3b4048 !important; }
 
 /* 📱 原生 App 底部導航列 */
 div[data-testid="stTabs"] > div[role="tablist"] {
