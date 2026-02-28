@@ -17,29 +17,27 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 (雙重穿透消除白邊) =================
+# ================= 2. 視覺風格定義 =================
 _ = st.components.v1.html("""<script>
-    function forceBlack(doc) {
-        if (!doc) return;
-        doc.documentElement.style.background = '#000000';
-        doc.body.style.background = '#000000';
+    try { 
+        const doc = window.parent.document;
+        doc.body.style.backgroundColor = '#000000';
+        doc.documentElement.style.backgroundColor = '#000000';
         
         const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
         oldMetas.forEach(m => m.remove());
         
-        const meta = doc.createElement('meta');
-        meta.name = 'theme-color';
-        meta.content = '#000000';
-        doc.head.appendChild(meta);
+        const metaBlack = doc.createElement('meta');
+        metaBlack.name = 'theme-color';
+        metaBlack.content = '#000000';
+        doc.head.appendChild(metaBlack);
         
         const metaApple = doc.createElement('meta');
         metaApple.name = 'apple-mobile-web-app-status-bar-style';
         metaApple.content = 'black-translucent';
         doc.head.appendChild(metaApple);
-    }
-    try { forceBlack(document); } catch(e) {}
-    try { forceBlack(window.parent.document); } catch(e) {}
-</script>""", height=0, width=0)
+    } catch(e) {}
+</script>""", height=0)
 
 try:
     with open("style.css", "r", encoding="utf-8") as f: st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -213,6 +211,8 @@ def dashboard_fragment():
     with tab_analytics:
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
         spoof_class = "text-red" if is_spoofed else "text-green"
+        
+        # 🎯 依照您的要求，將異常狀態精簡為「溢價過高」
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
