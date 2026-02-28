@@ -1,19 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 強制暗黑模式與防滑動白邊 */
-:root { color-scheme: dark; }
+/* 核彈級：強制暗黑模式、撐滿全螢幕、防滑動白邊 */
+:root { color-scheme: dark; background-color: #000000 !important; }
+
 html, body, #root, .stApp, [data-testid="stAppViewContainer"] { 
     background-color: #000000 !important; 
     background: #000000 !important;
     background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
     overflow-x: hidden !important;
-    overscroll-behavior: none !important; /* 殺死所有方向的回彈白邊 */
+    overscroll-behavior: none !important; 
+    min-height: 100vh !important; /* 強制黑布撐滿整個螢幕高度 */
+    height: 100% !important;
 }
 
 /* 隱藏 Streamlit 原生頂部 Header 與底部水印 */
 header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
-[data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; background: #000000 !important; }
+[data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; background: #000000 !important; min-height: 100vh !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"], footer { display: none !important; visibility: hidden; }
 
 /* 頂部空間極限壓縮 */
