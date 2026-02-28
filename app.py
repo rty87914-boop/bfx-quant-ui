@@ -17,27 +17,27 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 (強制 iOS 狀態列全黑) =================
+# ================= 2. 視覺風格定義 (強制消除 iOS 狀態列白邊) =================
 _ = st.components.v1.html("""<script>
     try { 
-        const head = window.parent.document.getElementsByTagName('head')[0]; 
+        const doc = window.parent.document;
+        doc.body.style.backgroundColor = '#000000';
+        doc.documentElement.style.backgroundColor = '#000000';
         
-        let metaColorLight = window.parent.document.createElement('meta');
-        metaColorLight.name = 'theme-color';
-        metaColorLight.content = '#000000';
-        metaColorLight.media = '(prefers-color-scheme: light)';
-        head.appendChild(metaColorLight);
+        // 強制清除預設的 theme-color
+        const existingMetas = doc.querySelectorAll('meta[name="theme-color"]');
+        existingMetas.forEach(m => m.remove());
         
-        let metaColorDark = window.parent.document.createElement('meta');
-        metaColorDark.name = 'theme-color';
-        metaColorDark.content = '#000000';
-        metaColorDark.media = '(prefers-color-scheme: dark)';
-        head.appendChild(metaColorDark);
+        // 注入純黑 theme-color
+        const metaBlack = doc.createElement('meta');
+        metaBlack.name = 'theme-color';
+        metaBlack.content = '#000000';
+        doc.head.appendChild(metaBlack);
         
-        let metaApple = window.parent.document.createElement('meta');
+        const metaApple = doc.createElement('meta');
         metaApple.name = 'apple-mobile-web-app-status-bar-style';
         metaApple.content = 'black-translucent';
-        head.appendChild(metaApple);
+        doc.head.appendChild(metaApple);
     } catch(e) {}
 </script>""", height=0)
 
@@ -103,8 +103,8 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列 (強制水平對齊)
-c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
+# 頂部導航列 (無 Emoji，強制水平對齊)
+c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
@@ -123,13 +123,10 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    # 無 Emoji 版本狀態更新
-    st.toast("資料同步完成")
-    
-    # 專業的 Live 狀態燈號
+    # 專業的 Live 狀態燈號 (純 CSS 圓點)
     st.markdown(f"<div style='text-align:right; color:#848e9c; font-size:0.75rem; font-weight:600; margin-top:-22px; margin-bottom:12px;'><span style='display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px; margin-bottom:1px;'></span>Live {tw_short_time}</div>", unsafe_allow_html=True)
 
-    # 1. 核心資產數據
+    # 1. 核心資產數據 (移除圖表)
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
@@ -230,9 +227,6 @@ def dashboard_fragment():
 
             if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
                 df['market_twap'] = df.get('market_twap', df['market_frr']).fillna(df['market_frr'])
-                df['表面FRR (紅)'] = df['market_frr']
-                df['真實TWAP (藍)'] = df['market_twap']
-                df['機器人報價 (綠)'] = df['bot_rate_yearly']
                 
                 win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
                 avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
@@ -240,10 +234,6 @@ def dashboard_fragment():
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
                 summary_html = f"""<div style="background: transparent; border: 1px solid #1a1d24; border-radius: 8px; padding: 16px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="okx-value text-green okx-value-mono" style="font-size:1.2rem;">{win_rate_twap:.1f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="okx-value {'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div></div>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
-                
-                st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊下方圖例可單獨觀察)</div>", unsafe_allow_html=True)
-                df_chart = df.set_index('時間')[['表面FRR (紅)', '真實TWAP (藍)', '機器人報價 (綠)']]
-                st.scatter_chart(df_chart, color=["#ff4d4f", "#0ea5e9", "#b2ff22"], height=250)
                 
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>操作日誌</div>", unsafe_allow_html=True)
                 cards_html = "<div class='okx-card-grid'>"
