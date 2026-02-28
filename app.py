@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 
 # ================= 0. 系統與日誌配置 =================
-st.set_page_config(page_title="資金管理終端", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [UI] %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -17,13 +17,27 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義 (強制 iOS 狀態列全黑) =================
 _ = st.components.v1.html("""<script>
     try { 
         const head = window.parent.document.getElementsByTagName('head')[0]; 
-        let metaColor = window.parent.document.querySelector('meta[name="theme-color"]');
-        if (!metaColor) { metaColor = window.parent.document.createElement('meta'); metaColor.name = 'theme-color'; head.appendChild(metaColor); }
-        metaColor.content = '#000000';
+        
+        let metaColorLight = window.parent.document.createElement('meta');
+        metaColorLight.name = 'theme-color';
+        metaColorLight.content = '#000000';
+        metaColorLight.media = '(prefers-color-scheme: light)';
+        head.appendChild(metaColorLight);
+        
+        let metaColorDark = window.parent.document.createElement('meta');
+        metaColorDark.name = 'theme-color';
+        metaColorDark.content = '#000000';
+        metaColorDark.media = '(prefers-color-scheme: dark)';
+        head.appendChild(metaColorDark);
+        
+        let metaApple = window.parent.document.createElement('meta');
+        metaApple.name = 'apple-mobile-web-app-status-bar-style';
+        metaApple.content = 'black-translucent';
+        head.appendChild(metaApple);
     } catch(e) {}
 </script>""", height=0)
 
@@ -89,10 +103,10 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列 (強制水平對齊，移除 Emoji)
+# 頂部導航列 (強制水平對齊)
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
-    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.5rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
     with st.popover("設定"):
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
@@ -109,7 +123,10 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    # 專業的 Live 狀態燈號 (使用 CSS 圓點取代 Emoji)
+    # 無 Emoji 版本狀態更新
+    st.toast("資料同步完成")
+    
+    # 專業的 Live 狀態燈號
     st.markdown(f"<div style='text-align:right; color:#848e9c; font-size:0.75rem; font-weight:600; margin-top:-22px; margin-bottom:12px;'><span style='display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px; margin-bottom:1px;'></span>Live {tw_short_time}</div>", unsafe_allow_html=True)
 
     # 1. 核心資產數據
@@ -147,7 +164,7 @@ def dashboard_fragment():
         future_val = current_total * ((1 + current_apy/100) ** years)
         profit_gained = future_val - current_total
         
-        st.markdown(f"""<div class="okx-panel-outline" style="display:flex; justify-content:space-between; align-items:center;"><div style="color:#7a808a; font-weight:500;">{years} 年後總資產預估</div><div style="text-align:right;"><div style="color:#b2ff22; font-size:1.6rem; font-weight:700; font-family:'JetBrains Mono', monospace;">${future_val:,.0f}</div><div style="color:#7a808a; font-size:0.85rem;">淨利潤 +${profit_gained:,.0f}</div></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="okx-panel-outline" style="display:flex; justify-content:space-between; align-items:center;"><div style="color:#7a808a; font-weight:500;">{years} 年後預估</div><div style="text-align:right;"><div style="color:#b2ff22; font-size:1.6rem; font-weight:700; font-family:'JetBrains Mono', monospace;">${future_val:,.0f}</div><div style="color:#7a808a; font-size:0.85rem;">淨利潤 +${profit_gained:,.0f}</div></div></div>""", unsafe_allow_html=True)
 
         o_stat = data.get('stats', {}).get('overall', {})
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
