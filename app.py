@@ -35,7 +35,7 @@ try:
 except FileNotFoundError:
     logger.warning("找不到 style.css，請確認檔案位置。")
 
-# ================= 3. 資料獲取引擎 (加入 TWAP 欄位) =================
+# ================= 3. 資料獲取引擎 =================
 async def fetch_cached_data(session) -> dict:
     if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -53,7 +53,6 @@ async def fetch_bot_decisions(session) -> list:
     if not SUPABASE_URL: return []
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
-        # 新增抓取 market_twap
         async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,market_twap,bot_amount,bot_period&order=created_at.desc&limit=100", headers=headers, timeout=5) as res:
             if res.status == 200:
                 return await res.json()
@@ -96,15 +95,18 @@ def dashboard_fragment():
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel" style="margin-top: 20px;"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value" style="font-size:2.5rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
+    # 🎯 修正：移除多餘的「當前淨年化」，改為更平衡清爽的三宮格狀態列
     next_repay_str = f"{int(data.get('next_repayment_time', 0)//3600)}h {int((data.get('next_repayment_time', 0)%3600)//60)}m" if data.get('next_repayment_time', 9999999) != 9999999 else "--"
-    st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">當前淨年化</div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="status-grid" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["策略表現", "活躍借出", "排隊掛單", "🤖 歸因分析"])
 
     with tab_main:
-        current_apy = data.get('hist_apy', 0) if data.get('auto_p', 0) > 0 else data.get('stats', {}).get('overall', {}).get('true_apy', 0)
+        # 🎯 修正：將對標基準改為引擎嚴格計算的 True APY，徹底解決隨時間衰減的問題
+        current_apy = data.get('stats', {}).get('overall', {}).get('true_apy', 0)
+        
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:20px 0 12px 0;'>標竿對比 (Benchmark)</div>", unsafe_allow_html=True)
-        etf_data = [{"name": "本策略", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
+        etf_data = [{"name": "本策略 (真實年化)", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
         max_rate = max([item["rate"] for item in etf_data])
 
         grid_html = "<div class='etf-grid'>"
@@ -113,7 +115,7 @@ def dashboard_fragment():
             card_class = "etf-card etf-card-active" if is_winner else "etf-card"
             
             if item.get("is_base"): 
-                sub_txt = "基準"
+                sub_txt = "策略基準"
                 sub_style = "color:#7a808a;"
             else:
                 spread = current_apy - item["rate"]
@@ -186,7 +188,6 @@ def dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 4. 歸因分析頁籤 (全新加入 TWAP 雙指標對比)
     with tab_analytics:
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫正在收集決策樣本，請稍後...</div>", unsafe_allow_html=True)
@@ -199,7 +200,6 @@ def dashboard_fragment():
                 df['時間'] = pd.Series(range(len(df)))
 
             if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
-                # 安全兼容：舊資料如果沒有 market_twap，就暫時拿 FRR 來填補避免當機
                 if 'market_twap' not in df.columns:
                     df['market_twap'] = df['market_frr']
                 else:
@@ -209,7 +209,6 @@ def dashboard_fragment():
                 df['真實TWAP (藍)'] = df['market_twap']
                 df['機器人報價 (綠)'] = df['bot_rate_yearly']
                 
-                # 同時計算兩種基準的勝率與 Alpha
                 win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
                 avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
                 win_rate_frr = (len(df[df['bot_rate_yearly'] >= df['market_frr']]) / len(df)) * 100 if len(df) > 0 else 0
@@ -219,13 +218,10 @@ def dashboard_fragment():
                 summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">勝率 (對標真 TWAP)</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate_twap:.1f}%</div></div><div><div class="okx-label">超額報酬 (真 Alpha)</div><div class="okx-value {'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread_twap:+.2f}%</div></div><div><div class="okx-label">勝率 (對標表面 FRR)</div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#848e9c;">{win_rate_frr:.1f}%</div></div></div>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
-                # 雷達散佈圖 (三線對比版)
                 st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊下方圖例可開關個別線條)</div>", unsafe_allow_html=True)
                 df_chart = df.set_index('時間')[['表面FRR (紅)', '真實TWAP (藍)', '機器人報價 (綠)']]
-                # 設定顏色：紅色=FRR, 藍色=TWAP, 綠色=您的機器人
                 st.scatter_chart(df_chart, color=["#ff4d4f", "#0ea5e9", "#b2ff22"], height=300)
                 
-                # 近期決策明細卡片牆 (同時顯示雙指標)
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1rem; margin:30px 0 12px 0;'>機器人雙眼操作日誌 (近期 10 筆)</div>", unsafe_allow_html=True)
                 cards_html = "<div class='okx-card-grid'>"
                 for _, row in df.head(10).iterrows():
@@ -235,7 +231,6 @@ def dashboard_fragment():
                     frr = row.get('market_frr', 0)
                     time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
                     
-                    # 卡片右上角標籤改為顯示「對標 TWAP」的真實 Alpha
                     spread_twap = bot_rate - twap
                     tag_class = "tag-green" if spread_twap >= 0 else "tag-red"
                     spread_twap_str = f"+{spread_twap:.2f}%" if spread_twap >= 0 else f"{spread_twap:.2f}%"
