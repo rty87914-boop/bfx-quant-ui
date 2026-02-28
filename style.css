@@ -9,15 +9,22 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"], header, footer { display: none !important; visibility: hidden; }
 
+/* 📱 針對手機端頂部留白進行極限壓縮 */
 .block-container { padding-top: 1rem !important; padding-bottom: 120px !important; max-width: 1100px;}
 
+/* ⛔ 徹底隱藏 Streamlit 原生醜陋的標題連結圖示 */
+.stMarkdown a.header-anchor { display: none !important; }
+
+/* ⚙️ 彈出式設定按鈕優化 */
+[data-testid="stPopover"] { display: flex; justify-content: flex-end; }
 [data-testid="stPopover"] button {
     background: transparent !important;
     border: none !important;
     color: #7a808a !important;
-    font-size: 1.2rem !important;
+    font-size: 1.4rem !important;
     padding: 0 !important;
     transition: color 0.2s;
+    line-height: 1 !important;
 }
 [data-testid="stPopover"] button:hover { color: #ffffff !important; }
 
@@ -60,7 +67,7 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 }
 .pulse-text { animation: neon-pulse 1.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
 
-/* ⓘ 懸浮提示氣泡 (完美修復跑版與換行) */
+/* ⓘ 懸浮提示氣泡 */
 .okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #7a808a; padding-bottom: 1px;}
 .okx-tooltip i { font-size: 0.75rem; color: #7a808a; font-style: normal; font-family: monospace; border: 1px solid #7a808a; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
 .okx-tooltip:hover::after {
@@ -74,8 +81,8 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     padding: 10px 12px;
     border-radius: 8px;
     font-size: 0.75rem;
-    white-space: normal; /* 允許自動換行 */
-    width: 180px;      /* 限制最大寬度，防止撐爆螢幕 */
+    white-space: normal; 
+    width: 180px;      
     text-align: center;
     z-index: 1000;
     border: 1px solid #2b3139;
