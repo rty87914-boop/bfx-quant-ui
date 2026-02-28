@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 全局 OLED 純黑背景 */
+/* 全局 OLED 純黑背景與底部空間保留 */
 html, body, [data-testid="stAppViewContainer"], .stApp { 
     background-color: #000000 !important; 
     background-image: none !important;
@@ -8,79 +8,108 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 }
 
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
-[data-testid="stSkeleton"], [data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stSkeleton"], [data-testid="stStatusWidget"], header, footer { display: none !important; visibility: hidden; }
 
-/* 刷新按鈕：圓潤膠囊風格 */
-.stButton > button {
-    width: auto !important;
-    padding: 6px 20px !important;
-    background-color: #121418 !important;
+/* 為底部導航列保留空間 */
+.block-container { padding-top: 1rem !important; padding-bottom: 120px !important; max-width: 1100px;}
+
+/* ⚙️ 彈出式設定按鈕 (隱藏背景) */
+[data-testid="stPopover"] button {
+    background: transparent !important;
     border: none !important;
-    color: #ffffff !important;
-    border-radius: 20px !important;
-    font-size: 0.85rem !important;
-    font-weight: 600 !important;
-    transition: all 0.2s ease !important;
+    color: #7a808a !important;
+    font-size: 1.2rem !important;
+    padding: 0 !important;
+    transition: color 0.2s;
 }
-.stButton > button:hover {
-    background-color: #1e2228 !important;
+[data-testid="stPopover"] button:hover { color: #ffffff !important; }
+
+/* =========================================
+   📱 原生 App 底部導航列 (Bottom Nav Bar) 
+========================================= */
+div[data-testid="stTabs"] > div[role="tablist"] {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    background-color: rgba(12, 14, 18, 0.90);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 99999;
+    border-top: 1px solid #1a1d24;
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: space-around;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    color: #7a808a !important;
+    font-weight: 500;
+    font-size: 0.95rem !important;
+    padding: 8px 0;
+    border: none !important;
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     color: #b2ff22 !important;
-}
-.stButton > button:active {
-    background-color: #b2ff22 !important;
-    color: #000000 !important;
+    font-weight: 700;
 }
 
-/* Web3 無邊框面板 */
-.okx-panel { 
-    background: #0c0e12; 
-    border: none; 
-    border-radius: 16px; 
-    padding: 24px; 
-    margin-bottom: 16px; 
+/* =========================================
+   🟢 呼吸燈特效 (Pulse Animation)
+========================================= */
+@keyframes neon-pulse {
+    0% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
+    50% { text-shadow: 0 0 25px rgba(178,255,34,0.8); transform: scale(1.02); color: #b2ff22;}
+    100% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
+}
+.pulse-text { animation: neon-pulse 1.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
+
+/* =========================================
+   ⓘ 懸浮提示氣泡 (Tooltip)
+========================================= */
+.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #7a808a; padding-bottom: 1px;}
+.okx-tooltip i { font-size: 0.75rem; color: #7a808a; font-style: normal; font-family: monospace; border: 1px solid #7a808a; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+.okx-tooltip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e2228;
+    color: #eaecef;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 1000;
+    border: 1px solid #2b3139;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    font-weight: 500;
 }
 
-/* 字體規範 (對齊純黑風格的高對比) */
+/* =========================================
+   卡片與排版組件
+========================================= */
+.okx-panel { background: #0c0e12; border-radius: 16px; padding: 24px; margin-bottom: 16px; }
+.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 16px; padding: 20px; margin-bottom: 16px; }
 .okx-label { color: #7a808a; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500; }
 .okx-value { color: #ffffff; font-size: 1.8rem; font-weight: 700; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
 .okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; }
-.okx-subtext { color: #5e6673; font-size: 0.8rem; margin-top: 4px; font-weight: 500; }
-
-/* 狀態色彩 (螢光綠主調) */
 .text-green { color: #b2ff22 !important; }
 .text-red { color: #ff4d4f !important; }
-.text-yellow { color: #fcd535 !important; }
-
-/* 狀態列網格 (四宮格) */
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
 .status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: none; }
-
-/* 交易所標準列表排版 (無邊框分隔線) */
-.okx-list-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-}
+.okx-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
 .okx-list-item.border-bottom { border-bottom: 1px solid #1a1d24; }
 .okx-list-label { color: #7a808a; font-size: 0.9rem; font-weight: 500; }
 .okx-list-value { color: #ffffff; font-size: 1rem; font-weight: 600; text-align: right; }
 
-/* =========================================
-   卡片牆專屬佈局
-========================================= */
 .okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
-.okx-item-card { 
-    background: #0c0e12; 
-    border: none; 
-    border-radius: 16px; 
-    padding: 20px; 
-    display: flex; 
-    flex-direction: column; 
-    transition: transform 0.2s ease;
-}
+.okx-item-card { background: #0c0e12; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s ease; }
 .okx-item-card:hover { transform: translateY(-2px); background: #121418; }
-
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 16px; margin-bottom: 8px; }
 .okx-tag { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
 .tag-green { color: #000000; background: #b2ff22; }
@@ -88,31 +117,8 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .tag-red { color: #ffffff; background: #ff4d4f; }
 .okx-card-amt { font-size: 1.4rem; font-weight: 700; color: #ffffff; }
 
-/* ETF 對標四宮格 */
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
 .etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 16px; text-align: center; border: none; }
 .etf-card-active { background: rgba(178, 255, 34, 0.05); border: 1px solid rgba(178, 255, 34, 0.3); }
 .etf-title { font-size: 0.85rem; color: #7a808a; margin-bottom: 8px; font-weight: 500;}
 .etf-rate { font-size: 1.6rem; font-weight: 700; color: #ffffff; }
-
-/* 底部狀態列標籤 */
-.footer-tag {
-    display: inline-block;
-    color: #7a808a;
-    font-size: 0.85rem;
-    background: #0c0e12;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 20px;
-    margin-right: 10px;
-    margin-top: 10px;
-    font-weight: 500;
-}
-.footer-tag span { color: #ffffff; font-weight: 600; }
-.footer-tag.alert span { color: #ff4d4f; }
-
-/* 隱藏預設元件，美化版面 */
-header, footer {visibility: hidden;} .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 1100px;}
-[data-testid="stTabs"] { margin-top: 10px; }
-[data-testid="stTabs"] button { color: #7a808a !important; font-weight: 500; font-size: 1rem !important;}
-[data-testid="stTabs"] button[aria-selected="true"] { color: #ffffff !important; font-weight: 700; border-bottom-color: #b2ff22 !important; }
