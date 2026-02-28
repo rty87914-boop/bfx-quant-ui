@@ -1,23 +1,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 強制暗黑模式與防滑動白邊 (徹底殺死 Safari 彈性回拉的白底) */
+/* 強制暗黑模式與防滑動白邊 */
 :root { color-scheme: dark; }
-html, body {
-    background-color: #000000 !important;
-    overflow-x: hidden !important; /* 解決右側大片空白問題 */
-    overscroll-behavior-y: none !important; 
-}
-
-.stApp, [data-testid="stAppViewContainer"] { 
+html, body, #root, .stApp, [data-testid="stAppViewContainer"] { 
     background-color: #000000 !important; 
+    background: #000000 !important;
     background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
     overflow-x: hidden !important;
+    overscroll-behavior: none !important; /* 殺死所有方向的回彈白邊 */
 }
 
 /* 隱藏 Streamlit 原生頂部 Header 與底部水印 */
 header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
-[data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; }
+[data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; background: #000000 !important; }
 [data-testid="stSkeleton"], [data-testid="stStatusWidget"], footer { display: none !important; visibility: hidden; }
 
 /* 頂部空間極限壓縮 */
@@ -27,7 +23,7 @@ header[data-testid="stHeader"] { display: none !important; background: transpare
 h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, 
 [data-testid="stMarkdownContainer"] a svg { display: none !important; pointer-events: none; }
 
-/* 🎯 精準控制：只讓「第一排」(標題與設定) 強制水平對齊，不影響下方卡片排版 */
+/* 🎯 精準控制：只讓「第一排」(標題與設定) 強制水平對齊 */
 div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
