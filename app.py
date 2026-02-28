@@ -15,13 +15,22 @@ START_DATE_STR = "2026-02-11"
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
-# 🎯 預設改為 300 秒 (5 分鐘)
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義 (加入手機頂部染黑魔法) =================
 _ = st.components.v1.html("""<script>
-    try { const head = window.parent.document.getElementsByTagName('head')[0]; const meta = window.parent.document.createElement('meta'); meta.name = 'apple-mobile-web-app-capable'; meta.content = 'yes'; head.appendChild(meta); } catch(e) {}
+    try { 
+        const head = window.parent.document.getElementsByTagName('head')[0]; 
+        
+        let metaColor = window.parent.document.querySelector('meta[name="theme-color"]');
+        if (!metaColor) { metaColor = window.parent.document.createElement('meta'); metaColor.name = 'theme-color'; head.appendChild(metaColor); }
+        metaColor.content = '#000000';
+        
+        let metaApple = window.parent.document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+        if (!metaApple) { metaApple = window.parent.document.createElement('meta'); metaApple.name = 'apple-mobile-web-app-status-bar-style'; head.appendChild(metaApple); }
+        metaApple.content = 'black-translucent';
+    } catch(e) {}
 </script>""", height=0)
 
 try:
@@ -82,7 +91,6 @@ def parse_wait_time(time_str):
         except: pass
     return time_str
 
-# 🎯 核心：轉換成精準的台灣時間 (UTC+8)
 def get_taiwan_time(utc_iso_str):
     if not utc_iso_str or utc_iso_str == "尚未同步": return "尚未同步"
     try:
@@ -96,18 +104,16 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列與 Modal 設定
-c_title, c_btn = st.columns([10, 1], vertical_alignment="center")
+# 🎯 頂部 Header 重構：確保標題與齒輪在窄螢幕上完美水平對齊
+c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
-    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:1.8rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:800; font-size:1.6rem; letter-spacing:-0.5px;">⚡ 資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
     with st.popover("⚙️"):
         st.markdown("<div style='font-weight:700; color:#fff; margin-bottom:10px;'>終端設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
-        
         tw_full_time = get_taiwan_time(st.session_state.last_update)
         st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步時間: {tw_full_time}</div>", unsafe_allow_html=True)
-        
         if st.button("↻ 強制刷新畫面", use_container_width=True): st.rerun()
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
@@ -115,14 +121,15 @@ def dashboard_fragment():
     data, decisions, equity_history = asyncio.run(fetch_all_data())
     if not data: return
         
-    # 🎯 修正 Toast 推播顯示的也是台灣時間
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
-    st.toast(f"資料同步完成 ({tw_short_time})", icon="🟢")
+    
+    # 巧妙地將 Live 燈號放在總資產的右上方，營造科技感
+    st.markdown(f"<div style='text-align:right; color:#b2ff22; font-size:0.75rem; font-weight:700; margin-top:-20px; margin-bottom:10px;'>🟢 Live {tw_short_time}</div>", unsafe_allow_html=True)
 
-    # 1. 核心資產數據 (套用 Pulse 呼吸燈動畫)
+    # 1. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
-    st.markdown(f"""<div class="okx-panel" style="margin-top: 15px;"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">合約投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日已實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
     # 2. 策略指標狀態
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
@@ -132,14 +139,14 @@ def dashboard_fragment():
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
-        # 🎯 修正：圖表改為只繪製「累計收益」，完美展現向上的曲線
-        st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:10px 0 10px 0;'>📈 歷史累計收益曲線</div>", unsafe_allow_html=True)
+        # 🎯 修正：改用極簡的 st.line_chart，完美呈現小幅度穩定獲利爬升的折線軌跡
+        st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:10px 0 10px 0;'>📈 歷史累計收益軌跡</div>", unsafe_allow_html=True)
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
             df_eq['累計收益 (USD)'] = df_eq['hist_p']
             df_eq['日期'] = pd.to_datetime(df_eq['record_date']).dt.strftime('%m/%d')
             df_chart = df_eq.set_index('日期')[['累計收益 (USD)']]
-            st.area_chart(df_chart, color="#b2ff22", height=180)
+            st.line_chart(df_chart, color="#b2ff22", height=180)
         else:
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中，即將繪製收益曲線...</div>", unsafe_allow_html=True)
 
@@ -214,7 +221,16 @@ def dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_analytics:
-        st.markdown(f"""<div class="okx-panel" style="margin-top: 10px; padding:16px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>AI 大腦診斷報告</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
+        # 🎯 大盤指標大搬家：霸氣坐鎮分析頁籤最上方
+        is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
+        spoof_class = "text-red" if is_spoofed else "text-green"
+        spoof_text = "⚠️ FRR 溢價警告" if is_spoofed else "🟢 健康"
+        
+        st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:10px 0 12px 0;'>🌐 大盤監控雷達</div>", unsafe_allow_html=True)
+        market_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; border: 1px solid #1a1d24;"><div><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem;">{data.get('market_frr', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>"""
+        st.markdown(market_html, unsafe_allow_html=True)
+
+        st.markdown(f"""<div class="okx-panel" style="padding:16px;"><div style="color: #b2ff22; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#b2ff22;"></span>AI 大腦診斷報告</div><div style="color: #ffffff; font-size: 0.95rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...')}</div></div>""", unsafe_allow_html=True)
 
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫正在收集決策樣本，請稍後...</div>", unsafe_allow_html=True)
@@ -232,8 +248,8 @@ def dashboard_fragment():
                 avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
                 win_rate_frr = (len(df[df['bot_rate_yearly'] >= df['market_frr']]) / len(df)) * 100 if len(df) > 0 else 0
 
-                st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:20px 0 12px 0;'>🧠 策略智商雙引擎對標</div>", unsafe_allow_html=True)
-                summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate_twap:.1f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="okx-value {'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread_twap:+.2f}%</div></div><div><div class="okx-label">勝率 (對標表面 FRR)</div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#7a808a;">{win_rate_frr:.1f}%</div></div></div>"""
+                st.markdown("<div style='color:#ffffff; font-weight:700; font-size:1.1rem; margin:24px 0 12px 0;'>🧠 策略智商雙引擎對標</div>", unsafe_allow_html=True)
+                summary_html = f"""<div style="background: #121418; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">{win_rate_twap:.1f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="okx-value {'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.3rem;">{avg_spread_twap:+.2f}%</div></div><div><div class="okx-label">勝率 (對標表面 FRR)</div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#7a808a;">{win_rate_frr:.1f}%</div></div></div>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
                 st.markdown("<div class='okx-label' style='margin-bottom:10px;'>決策雷達散佈圖 (點擊下方圖例可單獨觀察)</div>", unsafe_allow_html=True)
