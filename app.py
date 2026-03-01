@@ -4,6 +4,7 @@ import asyncio
 import pandas as pd
 from datetime import timedelta
 import logging
+import time
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
@@ -16,6 +17,7 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
+if 'ai_insight_result' not in st.session_state: st.session_state.ai_insight_result = None
 
 # ================= 2. 視覺風格定義 (雙重穿透 + PWA 原生化標籤) =================
 _ = st.components.v1.html("""<script>
@@ -24,17 +26,14 @@ _ = st.components.v1.html("""<script>
         doc.documentElement.style.background = '#000000';
         doc.body.style.background = '#000000';
         
-        // 移除舊有 Meta
         const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
         oldMetas.forEach(m => m.remove());
         
-        // 注入純黑主題
         const metaBlack = doc.createElement('meta');
         metaBlack.name = 'theme-color';
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
         
-        // 注入 PWA 隱藏網址列標籤 (讓加入主畫面變成獨立 App)
         const metaApple = doc.createElement('meta');
         metaApple.name = 'apple-mobile-web-app-status-bar-style';
         metaApple.content = 'black-translucent';
@@ -125,7 +124,6 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列 (強制水平對齊)
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -145,22 +143,17 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    # Live 狀態燈號 (純 CSS 圓點)
     st.markdown(f"<div style='text-align:right; color:#848e9c; font-size:0.75rem; font-weight:600; margin-top:-22px; margin-bottom:12px;'><span style='display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px; margin-bottom:1px;'></span>Live {tw_short_time}</div>", unsafe_allow_html=True)
 
-    # 1. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
     st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text okx-value-mono" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter';">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">投入本金</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日實現收益</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
-    # 2. 策略指標狀態
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
     st.markdown(f"""<div class="status-grid" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green okx-value-mono" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
-    # 底部導航列
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
-        # --- 月度收益切換引擎 (無圖表) ---
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
             df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
@@ -169,24 +162,16 @@ def dashboard_fragment():
             
             monthly_cum = df_eq.groupby('Month')['hist_p'].last()
             monthly_profit = monthly_cum.diff().fillna(monthly_cum)
-            
             available_months = list(monthly_profit.index)[::-1] 
             
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
-            
             selected_month = st.selectbox("切換月份", available_months, label_visibility="collapsed")
             
             if selected_month:
                 sel_profit = monthly_profit[selected_month]
                 p_color = "#b2ff22" if sel_profit >= 0 else "#ff4d4f"
                 p_sign = "+" if sel_profit >= 0 else ""
-                
-                st.markdown(f"""
-                <div style='background: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 28px 20px; text-align: center; margin-bottom: 24px;'>
-                    <div style='color: #7a808a; font-size: 0.95rem; margin-bottom: 12px; font-weight: 500;'>結算月份：{selected_month}</div>
-                    <div style='color: {p_color}; font-size: 2.8rem; font-weight: 700; font-family: "JetBrains Mono", monospace; letter-spacing: -1px;'>{p_sign}${sel_profit:.2f}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div style='background: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 28px 20px; text-align: center; margin-bottom: 24px;'><div style='color: #7a808a; font-size: 0.95rem; margin-bottom: 12px; font-weight: 500;'>結算月份：{selected_month}</div><div style='color: {p_color}; font-size: 2.8rem; font-weight: 700; font-family: "JetBrains Mono", monospace; letter-spacing: -1px;'>{p_sign}${sel_profit:.2f}</div></div>""", unsafe_allow_html=True)
         else:
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
@@ -205,16 +190,6 @@ def dashboard_fragment():
             grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.8rem; margin-top:8px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
-
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>複利推演</div>", unsafe_allow_html=True)
-        st.markdown("<div style='color:#7a808a; font-size:0.85rem; margin-bottom:10px;'>基於當前真實等效年化推算預期資產</div>", unsafe_allow_html=True)
-        years = st.slider("推演年期 (年)", 1, 5, 2, label_visibility="collapsed")
-        
-        current_total = data.get("total", 0)
-        future_val = current_total * ((1 + current_apy/100) ** years)
-        profit_gained = future_val - current_total
-        
-        st.markdown(f"""<div class="okx-panel-outline" style="display:flex; justify-content:space-between; align-items:center;"><div style="color:#7a808a; font-weight:500;">{years} 年後預估</div><div style="text-align:right;"><div style="color:#b2ff22; font-size:1.6rem; font-weight:700; font-family:'JetBrains Mono', monospace;">${future_val:,.0f}</div><div style="color:#7a808a; font-size:0.85rem; font-family:'JetBrains Mono';">淨利潤 +${profit_gained:,.0f}</div></div></div>""", unsafe_allow_html=True)
 
         o_stat = data.get('stats', {}).get('overall', {})
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
@@ -270,7 +245,32 @@ def dashboard_fragment():
         market_html = f"""<div style="background: transparent; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; border: 1px solid #1a1d24;"><div><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.05rem;">{spoof_text}</div></div><div><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem;">{data.get('market_frr', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>"""
         st.markdown(market_html, unsafe_allow_html=True)
 
-        st.markdown(f"""<div class="okx-panel" style="padding:16px;"><div style="color: #b2ff22; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">系統診斷報告</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{data.get('ai_insight_stored', '資料解析中...').replace('⚠️', '').replace('✅', '').replace('⚙️', '')}</div></div>""", unsafe_allow_html=True)
+        # ==========================================
+        # 🤖 AI 手動觸發診斷區塊
+        # ==========================================
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
+        
+        if st.button("執行最新 AI 診斷", use_container_width=True):
+            with st.spinner("AI 正在解析大盤與策略數據..."):
+                try:
+                    # ⚠️ 【請將您的 AI API 呼叫程式碼貼在這裡】
+                    # 例如：response = openai.chat.completions.create(...)
+                    
+                    time.sleep(1.5) # 模擬等待時間 (接上真實 API 後請刪除)
+                    mock_result = f"目前真實 TWAP 為 {data.get('market_twap', 0):.2f}%，市場結構健康。建議維持當前參數持續放貸。"
+                    
+                    st.session_state.ai_insight_result = mock_result
+                except Exception as e:
+                    st.session_state.ai_insight_result = f"診斷失敗，請檢查 API 設定: {str(e)}"
+
+        if st.session_state.ai_insight_result:
+            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">即時診斷報告</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
+        else:
+            last_record = data.get('ai_insight_stored', '')
+            if last_record and last_record != "資料解析中...":
+                 st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px;"><div style="color: #7a808a; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">歷史快取報告 (非最新)</div><div style="color: #50555e; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{last_record.replace('⚠️', '').replace('✅', '').replace('⚙️', '')}</div></div>""", unsafe_allow_html=True)
+            else:
+                 st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px; text-align:center;"><div style="color: #50555e; font-size: 0.85rem; font-weight:500;">點擊上方按鈕執行深度分析</div></div>""", unsafe_allow_html=True)
 
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本收集載入中...</div>", unsafe_allow_html=True)
