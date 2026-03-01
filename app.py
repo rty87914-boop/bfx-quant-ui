@@ -106,7 +106,7 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 🎯 標題與設定按鈕：利用新 CSS 完美同行，拔除多餘佔位
+# 🎯 標題與設定按鈕：完美同行，絕不切邊
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<div class="app-title">資金管理終端</div>', unsafe_allow_html=True)
