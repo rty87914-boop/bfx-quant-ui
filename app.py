@@ -4,7 +4,6 @@ import asyncio
 import pandas as pd
 from datetime import timedelta
 import logging
-import time
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") # 使用 Groq API
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") # 記得在 Streamlit Cloud 設定！
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
@@ -115,7 +114,8 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
+# 🎯 標題與設定按鈕 (透過新 CSS 強制不換行)
+c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; white-space:nowrap;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
@@ -258,19 +258,18 @@ def dashboard_fragment():
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
 
         # ==========================================
-        # 🤖 整合 Groq API 手動觸發診斷
+        # 🤖 Groq API 觸發區 (請確保 Streamlit 內已設定)
         # ==========================================
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         
         if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
-            with st.spinner("Groq 正在極速解析大盤與策略數據..."):
+            with st.spinner("Groq 正在極速解析大盤數據..."):
                 if not GROQ_API_KEY:
-                    st.session_state.ai_insight_result = "⚠️ 尚未設定 GROQ_API_KEY。請在 Streamlit Secrets 中設定。"
+                    st.session_state.ai_insight_result = "⚠️ 尚未設定 GROQ_API_KEY。請在 Streamlit Cloud 的 Secrets 中設定。"
                 else:
                     try:
                         import groq
                         client = groq.Groq(api_key=GROQ_API_KEY)
-                        
                         prompt = f"""
                         你是一位專業的量化放貸分析師。請根據以下最新市場數據給出 50 字以內的精簡策略建議：
                         - 當前表面 FRR: {data.get('market_frr', 0)}%
@@ -278,9 +277,8 @@ def dashboard_fragment():
                         - 資金閒置率: {data.get('idle_pct', 0)}%
                         - 目前我的加權淨年化: {data.get('active_apr', 0)}%
                         """
-                        
                         response = client.chat.completions.create(
-                            model="llama3-8b-8192", # 您可在此替換為您慣用的 Groq 模型，如 llama-3.3-70b-versatile
+                            model="llama3-8b-8192", 
                             messages=[
                                 {"role": "system", "content": "你是一個冷靜、專業的交易員大腦，請勿使用 Emoji。"},
                                 {"role": "user", "content": prompt}
