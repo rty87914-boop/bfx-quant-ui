@@ -10,36 +10,32 @@ html, body, #root, .stApp, [data-testid="stAppViewContainer"], .main {
     -webkit-tap-highlight-color: transparent; 
 }
 
-/* 2. 隱藏 Streamlit 原生干擾元件與修復全域邊界 */
+/* 2. 隱藏干擾元件與修復全域邊界 (防切斷核心) */
 header[data-testid="stHeader"], footer, .stSpinner, .stMarkdown a { display: none !important; pointer-events: none; }
 .block-container { 
-    padding: 16px 12px 100px 12px !important; /* 強制左右邊界內縮 */
+    padding: 16px 16px 100px 16px !important; /* 確保左右有安全距離 */
     max-width: 100vw !important; 
     overflow-x: hidden !important; 
-    box-sizing: border-box !important; /* 絕對不允許超出螢幕 */
+    box-sizing: border-box !important; 
 }
 
-/* 3. 🎯 頂部標題與設定：核彈級鎖死同行、防切邊 */
-div[data-testid="stHorizontalBlock"]:first-of-type { 
+/* 3. 🎯 頂部標題與設定：核彈級防切邊 */
+div[data-testid="stHorizontalBlock"] { 
     display: flex !important; 
     flex-wrap: nowrap !important; 
     align-items: center !important; 
     justify-content: space-between !important;
     width: 100% !important;
-    gap: 0 !important;
+    gap: 10px !important;
 }
-div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:first-child {
-    flex: 1 1 auto !important; 
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
     width: auto !important;
-}
-div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:last-child {
-    flex: 0 0 auto !important; 
-    width: auto !important;
-    display: flex !important;
-    justify-content: flex-end !important;
+    flex: 0 1 auto !important; /* 允許自動收縮，絕不撐破畫面 */
+    min-width: 0 !important;
+    padding: 0 !important;
 }
 
-/* 4. 組件視覺風格與網格 */
+/* 4. 組件視覺風格 */
 .okx-panel { background: #0c0e12; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #121418; width: 100%; box-sizing: border-box; }
 .okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; width: 100%; box-sizing: border-box;}
 .okx-label { color: #7a808a; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; }
@@ -56,8 +52,8 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:l
 .okx-list-label { color: #7a808a; font-size: 0.85rem; font-weight: 500; }
 .okx-list-value { color: #ffffff; font-size: 0.95rem; font-weight: 600; text-align: right; }
 
-.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 10px; }
-.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease; }
+.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100%, 1fr)); gap: 16px; margin-top: 10px; }
+.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease; box-sizing: border-box;}
 .okx-item-card:active { transform: scale(0.97); background-color: #121418; }
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 12px; margin-bottom: 8px; }
 .okx-card-amt { font-size: 1.2rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
@@ -72,16 +68,18 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:l
 [data-testid="stPopover"] button:active { transform: scale(0.92) !important; background: #1a1d24 !important; }
 
 /* 底部導航列 */
-div[data-testid="stTabs"] > div[role="tablist"] { position: fixed; bottom: 0; left: 0; width: 100vw; background-color: rgba(12, 14, 18, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 99999; border-top: 1px solid #1a1d24; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); display: flex; justify-content: space-around; }
+div[data-testid="stTabs"] > div[role="tablist"] { position: fixed; bottom: 0; left: 0; width: 100vw; background-color: rgba(12, 14, 18, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 99999; border-top: 1px solid #1a1d24; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); display: flex; justify-content: space-around; box-sizing: border-box; }
 div[data-testid="stTabs"] > div[role="tablist"] > button { flex: 1; display: flex; justify-content: center; color: #7a808a !important; font-weight: 500; font-size: 0.9rem !important; padding: 8px 0; border: none !important; transition: transform 0.1s ease; }
 div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
 div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
 
-/* 特效與其他 */
+/* 特效與提示氣泡 */
 @keyframes neon-pulse { 0% { text-shadow: 0 0 0px rgba(178,255,34,0); } 50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;} 100% { text-shadow: 0 0 0px rgba(178,255,34,0); } }
 .pulse-text { animation: neon-pulse 1.5s infinite; }
 .okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px; white-space: nowrap;}
 .okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+
+/* ETF卡片 */
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
 .etf-card { background: #0c0e12; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
 .etf-card:active { transform: scale(0.96); }
