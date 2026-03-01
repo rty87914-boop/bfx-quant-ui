@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") # 使用 Groq API
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
@@ -31,6 +32,14 @@ _ = st.components.v1.html("""<script>
         metaBlack.name = 'theme-color';
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
+        const metaApple = doc.createElement('meta');
+        metaApple.name = 'apple-mobile-web-app-status-bar-style';
+        metaApple.content = 'black-translucent';
+        doc.head.appendChild(metaApple);
+        const metaCapable = doc.createElement('meta');
+        metaCapable.name = 'apple-mobile-web-app-capable';
+        metaCapable.content = 'yes';
+        doc.head.appendChild(metaCapable);
     }
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
@@ -106,8 +115,7 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 🎯 頂部導航列 (修復跑版)
-c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
+c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; white-space:nowrap;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
@@ -126,7 +134,6 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    # 🎯 核心資產數據 (修復 Live 燈號錯位與 TWD 斷行)
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     
     st.markdown(f"""
@@ -149,7 +156,6 @@ def dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    # 策略指標狀態 (安全 2x2 網格)
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
     st.markdown(f"""
     <div class="stats-2-col">
@@ -231,7 +237,7 @@ def dashboard_fragment():
         else:
             total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
             stuck_count = data.get('stuck_offers_count', 0)
-            st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="stats-3-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
 
             cards_html = "<div class='okx-card-grid'>"
             for o in offers_data:
@@ -248,28 +254,49 @@ def dashboard_fragment():
         spoof_class = "text-red" if is_spoofed else "text-green"
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
-        # 🎯 修復：大盤監控改為安全 2x2 網格
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
 
+        # ==========================================
+        # 🤖 整合 Groq API 手動觸發診斷
+        # ==========================================
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         
-        if st.button("執行最新 AI 診斷", use_container_width=True):
-            with st.spinner("AI 正在解析大盤與策略數據..."):
-                try:
-                    time.sleep(1.5) 
-                    st.session_state.ai_insight_result = f"目前真實 TWAP 為 {data.get('market_twap', 0):.2f}%，市場結構健康。建議維持當前參數持續放貸。"
-                except Exception as e:
-                    st.session_state.ai_insight_result = f"診斷失敗，請檢查 API 設定: {str(e)}"
+        if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
+            with st.spinner("Groq 正在極速解析大盤與策略數據..."):
+                if not GROQ_API_KEY:
+                    st.session_state.ai_insight_result = "⚠️ 尚未設定 GROQ_API_KEY。請在 Streamlit Secrets 中設定。"
+                else:
+                    try:
+                        import groq
+                        client = groq.Groq(api_key=GROQ_API_KEY)
+                        
+                        prompt = f"""
+                        你是一位專業的量化放貸分析師。請根據以下最新市場數據給出 50 字以內的精簡策略建議：
+                        - 當前表面 FRR: {data.get('market_frr', 0)}%
+                        - 真實成交均價 TWAP: {data.get('market_twap', 0)}%
+                        - 資金閒置率: {data.get('idle_pct', 0)}%
+                        - 目前我的加權淨年化: {data.get('active_apr', 0)}%
+                        """
+                        
+                        response = client.chat.completions.create(
+                            model="llama3-8b-8192", # 您可在此替換為您慣用的 Groq 模型，如 llama-3.3-70b-versatile
+                            messages=[
+                                {"role": "system", "content": "你是一個冷靜、專業的交易員大腦，請勿使用 Emoji。"},
+                                {"role": "user", "content": prompt}
+                            ],
+                            max_tokens=150
+                        )
+                        st.session_state.ai_insight_result = response.choices[0].message.content.strip()
+                    except ImportError:
+                        st.session_state.ai_insight_result = "⚠️ 找不到 groq 套件，請在 requirements.txt 中加入 groq。"
+                    except Exception as e:
+                        st.session_state.ai_insight_result = f"Groq API 呼叫失敗: {str(e)}"
 
         if st.session_state.ai_insight_result:
-            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">即時診斷報告</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">即時診斷報告 (Powered by Groq)</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
         else:
-            last_record = data.get('ai_insight_stored', '')
-            if last_record and last_record != "資料解析中...":
-                 st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px;"><div style="color: #7a808a; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">歷史快取報告 (非最新)</div><div style="color: #50555e; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{last_record.replace('⚠️', '').replace('✅', '').replace('⚙️', '')}</div></div>""", unsafe_allow_html=True)
-            else:
-                 st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px; text-align:center;"><div style="color: #50555e; font-size: 0.85rem; font-weight:500;">點擊上方按鈕執行深度分析</div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px; text-align:center;"><div style="color: #50555e; font-size: 0.85rem; font-weight:500;">點擊上方按鈕，呼叫 Groq 執行深度分析</div></div>""", unsafe_allow_html=True)
 
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本收集載入中...</div>", unsafe_allow_html=True)
