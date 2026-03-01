@@ -17,7 +17,7 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義 (強制消除 iOS 狀態列白邊) =================
 _ = st.components.v1.html("""<script>
     try { 
         const doc = window.parent.document;
@@ -66,9 +66,18 @@ async def fetch_bot_decisions(session) -> list:
     except Exception: pass
     return []
 
+async def fetch_equity_history(session) -> list:
+    if not SUPABASE_URL: return []
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bfx_nav?select=record_date,auto_p,hist_p&order=record_date.asc", headers=headers, timeout=5) as res:
+            if res.status == 200: return await res.json()
+    except Exception: pass
+    return []
+
 async def fetch_all_data():
     async with aiohttp.ClientSession() as session:
-        return await asyncio.gather(fetch_cached_data(session), fetch_bot_decisions(session))
+        return await asyncio.gather(fetch_cached_data(session), fetch_bot_decisions(session), fetch_equity_history(session))
 
 # ================= 4. 智能時間與時區轉換 =================
 def format_time_smart(seconds):
@@ -115,7 +124,7 @@ with c_btn:
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
-    data, decisions = asyncio.run(fetch_all_data())
+    data, decisions, equity_history = asyncio.run(fetch_all_data())
     if not data: return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
@@ -138,8 +147,42 @@ def dashboard_fragment():
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
+        # --- 歷史軌跡與月度明細 ---
+        if equity_history:
+            df_eq = pd.DataFrame(equity_history)
+            df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
+            df_eq = df_eq.sort_values('日期')
+            
+            # 1. 歷史累計收益折線圖
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>歷史累計收益</div>", unsafe_allow_html=True)
+            df_eq['累計收益 (USD)'] = df_eq['hist_p']
+            df_chart = df_eq.set_index(df_eq['日期'].dt.strftime('%m/%d'))[['累計收益 (USD)']]
+            st.line_chart(df_chart, color="#b2ff22", height=180)
+            
+            # 2. 月度收益明細計算
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>月度收益明細</div>", unsafe_allow_html=True)
+            df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
+            
+            # 取得每個月最後一天的累計收益
+            monthly_cum = df_eq.groupby('Month')['hist_p'].last()
+            # 計算每月新增的收益 (當月最後一天 - 上個月最後一天)，並將第一個月的空值補為第一個月本身的數值
+            monthly_profit = monthly_cum.diff().fillna(monthly_cum)
+            
+            # 渲染月度卡片網格
+            monthly_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 20px;'>"
+            for month, profit in monthly_profit.items():
+                p_color = "#b2ff22" if profit >= 0 else "#ff4d4f"
+                p_sign = "+" if profit >= 0 else ""
+                monthly_html += f"<div style='background: transparent; border: 1px solid #1a1d24; border-radius: 8px; padding: 12px; text-align: center;'><div style='color: #7a808a; font-size: 0.8rem; margin-bottom: 4px;'>{month}</div><div style='color: {p_color}; font-size: 1.15rem; font-weight: 700; font-family: \"JetBrains Mono\", monospace;'>{p_sign}${profit:.2f}</div></div>"
+            monthly_html += "</div>"
+            st.markdown(monthly_html, unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>歷史累計收益</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
+
+        # --- 其他總覽區塊 ---
         current_apy = data.get('stats', {}).get('overall', {}).get('true_apy', 0)
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
         etf_data = [{"name": "本策略 (真實年化)", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
         max_rate = max([item["rate"] for item in etf_data])
 
@@ -211,8 +254,6 @@ def dashboard_fragment():
     with tab_analytics:
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
         spoof_class = "text-red" if is_spoofed else "text-green"
-        
-        # 🎯 依照您的要求，將異常狀態精簡為「溢價過高」
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
