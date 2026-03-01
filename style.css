@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 核彈級：強制暗黑模式、撐滿全螢幕、防滑動白邊 */
+/* 1. 核彈級：強制暗黑模式、撐滿全螢幕、防滑動白邊 */
 :root { color-scheme: dark; background-color: #000000 !important; }
 
 html, body, #root, .stApp, [data-testid="stAppViewContainer"] { 
@@ -10,14 +10,16 @@ html, body, #root, .stApp, [data-testid="stAppViewContainer"] {
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
     overflow-x: hidden !important;
     overscroll-behavior: none !important; 
-    min-height: 100vh !important; /* 強制黑布撐滿整個螢幕高度 */
+    min-height: 100vh !important;
     height: 100% !important;
+    -webkit-text-size-adjust: 100%; /* 防止 iOS 自動放大字體破壞排版 */
+    -webkit-tap-highlight-color: transparent; /* 消除 Safari 點擊時的醜陋灰底 */
 }
 
-/* 隱藏 Streamlit 原生頂部 Header 與底部水印 */
+/* 2. 👻 徹底殺死刷新遮罩與右上角轉圈動畫 */
 header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
 [data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; background: #000000 !important; min-height: 100vh !important; }
-[data-testid="stSkeleton"], [data-testid="stStatusWidget"], footer { display: none !important; visibility: hidden; }
+[data-testid="stSkeleton"], [data-testid="stStatusWidget"], .stSpinner, footer { display: none !important; visibility: hidden; }
 
 /* 頂部空間極限壓縮 */
 .block-container { padding-top: 16px !important; padding-bottom: 120px !important; max-width: 1100px; overflow-x: hidden;}
@@ -26,7 +28,7 @@ header[data-testid="stHeader"] { display: none !important; background: transpare
 h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, 
 [data-testid="stMarkdownContainer"] a svg { display: none !important; pointer-events: none; }
 
-/* 🎯 精準控制：只讓「第一排」(標題與設定) 強制水平對齊 */
+/* 🎯 精準控制：第一排(標題與設定) 強制水平對齊 */
 div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
@@ -40,7 +42,7 @@ div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-te
     min-width: 0 !important;
 }
 
-/* 設定按鈕專業化 */
+/* ⚙️ 設定按鈕專業化與觸控回饋 */
 [data-testid="stPopover"] { display: block; }
 [data-testid="stPopover"] button {
     background: #0c0e12 !important;
@@ -49,10 +51,11 @@ div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-te
     color: #eaecef !important;
     font-size: 0.85rem !important;
     padding: 6px 14px !important;
-    transition: all 0.2s;
+    transition: transform 0.1s ease, background-color 0.2s ease, border-color 0.2s ease !important;
     font-weight: 500 !important;
+    cursor: pointer;
 }
-[data-testid="stPopover"] button:hover { border-color: #3b4048 !important; }
+[data-testid="stPopover"] button:active { transform: scale(0.95) !important; background: #1a1d24 !important; }
 
 /* 📱 原生 App 底部導航列 */
 div[data-testid="stTabs"] > div[role="tablist"] {
@@ -78,7 +81,9 @@ div[data-testid="stTabs"] > div[role="tablist"] > button {
     font-size: 0.95rem !important;
     padding: 8px 0;
     border: none !important;
+    transition: transform 0.1s ease, color 0.2s ease !important;
 }
+div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
 div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     color: #b2ff22 !important;
     font-weight: 700;
@@ -95,44 +100,29 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 /* ⓘ 懸浮提示氣泡 */
 .okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px;}
 .okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
-.okx-tooltip:hover::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: 130%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e2228;
-    color: #eaecef;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    white-space: normal; 
-    width: 180px;      
-    text-align: center;
-    z-index: 1000;
-    border: 1px solid #2b3139;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    font-weight: 500;
-    line-height: 1.4;
-}
 
-/* 組件排版 */
-.okx-panel { background: #0c0e12; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #121418; }
-.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+/* 組件排版與 👆 原生觸控回饋 */
+.okx-panel { background: #0c0e12; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #121418; transition: transform 0.15s ease; }
+.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: transform 0.15s ease; }
 .okx-label { color: #7a808a; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500; }
 .okx-value { color: #ffffff; font-size: 1.8rem; font-weight: 700; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
-.okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; }
+.okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .text-green { color: #b2ff22 !important; }
 .text-red { color: #ff4d4f !important; }
+
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: 1px solid #121418; }
+.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: 1px solid #121418; transition: transform 0.1s ease; }
+.status-card:active { transform: scale(0.97); background: #121418; }
+
 .okx-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
 .okx-list-item.border-bottom { border-bottom: 1px solid #1a1d24; }
 .okx-list-label { color: #7a808a; font-size: 0.9rem; font-weight: 500; }
 .okx-list-value { color: #ffffff; font-size: 1rem; font-weight: 600; text-align: right; }
 
 .okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
-.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; border: 1px solid #121418; }
+.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease, background-color 0.1s ease; }
+.okx-item-card:active { transform: scale(0.97); background-color: #121418; border-color: #2b3139; }
+
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 16px; margin-bottom: 8px; }
 .okx-tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .tag-green { color: #000000; background: #b2ff22; }
@@ -142,7 +132,8 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 .okx-card-amt { font-size: 1.3rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
-.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; }
+.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
+.etf-card:active { transform: scale(0.96); background: #121418; }
 .etf-card-active { background: rgba(178, 255, 34, 0.03); border: 1px solid rgba(178, 255, 34, 0.2); }
 .etf-title { font-size: 0.85rem; color: #7a808a; margin-bottom: 8px; font-weight: 500;}
-.etf-rate { font-size: 1.5rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
+.etf-rate { font-size: 1.5rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
