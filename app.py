@@ -17,7 +17,7 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 (強制消除 iOS 狀態列白邊) =================
+# ================= 2. 視覺風格定義 =================
 _ = st.components.v1.html("""<script>
     try { 
         const doc = window.parent.document;
@@ -110,7 +110,7 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列 (強制水平對齊)
+# 頂部導航列
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -132,7 +132,7 @@ def dashboard_fragment():
     
     st.toast("資料同步完成")
     
-    # 專業的 Live 狀態燈號
+    # Live 狀態燈號
     st.markdown(f"<div style='text-align:right; color:#848e9c; font-size:0.75rem; font-weight:600; margin-top:-22px; margin-bottom:12px;'><span style='display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px; margin-bottom:1px;'></span>Live {tw_short_time}</div>", unsafe_allow_html=True)
 
     # 1. 核心資產數據
@@ -147,37 +147,36 @@ def dashboard_fragment():
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
-        # --- 歷史軌跡與月度明細 ---
+        # --- 月度收益切換引擎 ---
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
             df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
             df_eq = df_eq.sort_values('日期')
-            
-            # 1. 歷史累計收益折線圖
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>歷史累計收益</div>", unsafe_allow_html=True)
-            df_eq['累計收益 (USD)'] = df_eq['hist_p']
-            df_chart = df_eq.set_index(df_eq['日期'].dt.strftime('%m/%d'))[['累計收益 (USD)']]
-            st.line_chart(df_chart, color="#b2ff22", height=180)
-            
-            # 2. 月度收益明細計算
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>月度收益明細</div>", unsafe_allow_html=True)
             df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
             
-            # 取得每個月最後一天的累計收益
+            # 計算每個月的淨利潤
             monthly_cum = df_eq.groupby('Month')['hist_p'].last()
-            # 計算每月新增的收益 (當月最後一天 - 上個月最後一天)，並將第一個月的空值補為第一個月本身的數值
             monthly_profit = monthly_cum.diff().fillna(monthly_cum)
             
-            # 渲染月度卡片網格
-            monthly_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 20px;'>"
-            for month, profit in monthly_profit.items():
-                p_color = "#b2ff22" if profit >= 0 else "#ff4d4f"
-                p_sign = "+" if profit >= 0 else ""
-                monthly_html += f"<div style='background: transparent; border: 1px solid #1a1d24; border-radius: 8px; padding: 12px; text-align: center;'><div style='color: #7a808a; font-size: 0.8rem; margin-bottom: 4px;'>{month}</div><div style='color: {p_color}; font-size: 1.15rem; font-weight: 700; font-family: \"JetBrains Mono\", monospace;'>{p_sign}${profit:.2f}</div></div>"
-            monthly_html += "</div>"
-            st.markdown(monthly_html, unsafe_allow_html=True)
+            available_months = list(monthly_profit.index)[::-1] # 最新月份排在最上面
+            
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
+            
+            selected_month = st.selectbox("切換月份", available_months, label_visibility="collapsed")
+            
+            if selected_month:
+                sel_profit = monthly_profit[selected_month]
+                p_color = "#b2ff22" if sel_profit >= 0 else "#ff4d4f"
+                p_sign = "+" if sel_profit >= 0 else ""
+                
+                st.markdown(f"""
+                <div style='background: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 28px 20px; text-align: center; margin-bottom: 24px;'>
+                    <div style='color: #7a808a; font-size: 0.95rem; margin-bottom: 12px; font-weight: 500;'>結算月份：{selected_month}</div>
+                    <div style='color: {p_color}; font-size: 2.8rem; font-weight: 700; font-family: "JetBrains Mono", monospace; letter-spacing: -1px;'>{p_sign}${sel_profit:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>歷史累計收益</div>", unsafe_allow_html=True)
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
 
         # --- 其他總覽區塊 ---
