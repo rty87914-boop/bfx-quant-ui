@@ -1,139 +1,112 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 1. 核彈級：強制暗黑模式、撐滿全螢幕、防滑動白邊 */
+/* 1. 基礎重置與防白邊 */
 :root { color-scheme: dark; background-color: #000000 !important; }
-
 html, body, #root, .stApp, [data-testid="stAppViewContainer"] { 
     background-color: #000000 !important; 
-    background: #000000 !important;
-    background-image: none !important;
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
-    overflow-x: hidden !important;
     overscroll-behavior: none !important; 
-    min-height: 100vh !important;
-    height: 100% !important;
-    -webkit-text-size-adjust: 100%; /* 防止 iOS 自動放大字體破壞排版 */
-    -webkit-tap-highlight-color: transparent; /* 消除 Safari 點擊時的醜陋灰底 */
+    -webkit-text-size-adjust: 100%; 
+    -webkit-tap-highlight-color: transparent; 
 }
 
-/* 2. 👻 徹底殺死刷新遮罩與右上角轉圈動畫 */
-header[data-testid="stHeader"] { display: none !important; background: transparent !important; }
-[data-testid="stAppViewContainer"] > .main { opacity: 1 !important; transition: none !important; background: #000000 !important; min-height: 100vh !important; }
-[data-testid="stSkeleton"], [data-testid="stStatusWidget"], .stSpinner, footer { display: none !important; visibility: hidden; }
+/* 2. 隱藏 Streamlit 原生干擾元件 */
+header[data-testid="stHeader"], footer, .stSpinner { display: none !important; }
+[data-testid="stAppViewContainer"] > .main { background: #000000 !important; }
+.block-container { padding-top: 1rem !important; padding-bottom: 100px !important; max-width: 1100px; }
 
-/* 頂部空間極限壓縮 */
-.block-container { padding-top: 16px !important; padding-bottom: 120px !important; max-width: 1100px; overflow-x: hidden;}
+/* 隱藏標題連結圖示 */
+.stMarkdown a, h1 a, h2 a, h3 a { display: none !important; pointer-events: none; }
 
-/* ⛔ 徹底隱藏標題的連結圖示 */
-h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, 
-[data-testid="stMarkdownContainer"] a svg { display: none !important; pointer-events: none; }
-
-/* 🎯 精準控制：第一排(標題與設定) 強制水平對齊 */
-div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+/* 3. 🎯 頂部導航列：強制鎖定 70% / 30% 比例，絕不跑版 */
+div[data-testid="stHorizontalBlock"] { 
+    display: flex !important; 
+    flex-wrap: nowrap !important; 
+    align-items: center !important; 
 }
-div[data-testid="stAppViewBlockContainer"] > div:first-child > div > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    width: auto !important;
-    flex: 0 1 auto !important;
-    min-width: 0 !important;
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(1) { 
+    width: 75% !important; flex: 0 0 75% !important; 
+}
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) { 
+    width: 25% !important; flex: 0 0 25% !important; 
+    display: flex; justify-content: flex-end; 
 }
 
-/* ⚙️ 設定按鈕專業化與觸控回饋 */
-[data-testid="stPopover"] { display: block; }
-[data-testid="stPopover"] button {
-    background: #0c0e12 !important;
-    border: 1px solid #1a1d24 !important;
-    border-radius: 6px !important;
-    color: #eaecef !important;
-    font-size: 0.85rem !important;
-    padding: 6px 14px !important;
-    transition: transform 0.1s ease, background-color 0.2s ease, border-color 0.2s ease !important;
-    font-weight: 500 !important;
-    cursor: pointer;
-}
-[data-testid="stPopover"] button:active { transform: scale(0.95) !important; background: #1a1d24 !important; }
+/* 4. 通用排版與文字鎖定 */
+.nowrap-text { white-space: nowrap !important; }
+.flex-baseline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 
-/* 📱 原生 App 底部導航列 */
-div[data-testid="stTabs"] > div[role="tablist"] {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100vw;
-    background-color: rgba(12, 14, 18, 0.95);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    z-index: 99999;
-    border-top: 1px solid #1a1d24;
-    padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
-    display: flex;
-    justify-content: space-around;
-}
-div[data-testid="stTabs"] > div[role="tablist"] > button {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    color: #7a808a !important;
-    font-weight: 500;
-    font-size: 0.95rem !important;
-    padding: 8px 0;
-    border: none !important;
-    transition: transform 0.1s ease, color 0.2s ease !important;
-}
-div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
-div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
-    color: #b2ff22 !important;
-    font-weight: 700;
-}
-
-/* 🟢 呼吸燈特效 */
-@keyframes neon-pulse {
-    0% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
-    50% { text-shadow: 0 0 20px rgba(178,255,34,0.6); transform: scale(1.01); color: #b2ff22;}
-    100% { text-shadow: 0 0 0px rgba(178,255,34,0); transform: scale(1); }
-}
-.pulse-text { animation: neon-pulse 1.5s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
-
-/* ⓘ 懸浮提示氣泡 */
-.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px;}
-.okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
-
-/* 組件排版與 👆 原生觸控回饋 */
-.okx-panel { background: #0c0e12; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #121418; transition: transform 0.15s ease; }
-.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: transform 0.15s ease; }
-.okx-label { color: #7a808a; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500; }
-.okx-value { color: #ffffff; font-size: 1.8rem; font-weight: 700; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
+/* 5. 組件視覺風格與觸控回饋 */
+.okx-panel { background: #0c0e12; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #121418; transition: transform 0.15s ease; }
+.okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.okx-label { color: #7a808a; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; }
 .okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.okx-value-huge { font-size: 2.3rem; font-weight: 700; line-height: 1.1; color: #ffffff; }
+
 .text-green { color: #b2ff22 !important; }
 .text-red { color: #ff4d4f !important; }
 
-.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.status-card { background: #0c0e12; border-radius: 12px; padding: 16px; border: 1px solid #121418; transition: transform 0.1s ease; }
-.status-card:active { transform: scale(0.97); background: #121418; }
+/* 網格系統 (嚴格控制手機端欄數) */
+.stats-3-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; border-top: 1px solid #1a1d24; padding-top: 16px; margin-top: 16px; }
+.stats-2-col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+.status-card { background: #0c0e12; border-radius: 12px; padding: 14px; border: 1px solid #121418; transition: transform 0.1s ease; }
+.status-card:active { transform: scale(0.97); }
 
-.okx-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
+/* 列表與卡片 */
+.okx-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
 .okx-list-item.border-bottom { border-bottom: 1px solid #1a1d24; }
-.okx-list-label { color: #7a808a; font-size: 0.9rem; font-weight: 500; }
-.okx-list-value { color: #ffffff; font-size: 1rem; font-weight: 600; text-align: right; }
+.okx-list-label { color: #7a808a; font-size: 0.85rem; font-weight: 500; }
+.okx-list-value { color: #ffffff; font-size: 0.95rem; font-weight: 600; text-align: right; }
 
-.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
-.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease, background-color 0.1s ease; }
+.okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 10px; }
+.okx-item-card { background: #0c0e12; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease; }
 .okx-item-card:active { transform: scale(0.97); background-color: #121418; border-color: #2b3139; }
+.okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 12px; margin-bottom: 8px; }
+.okx-card-amt { font-size: 1.2rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
-.okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 16px; margin-bottom: 8px; }
+/* 標籤 */
 .okx-tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .tag-green { color: #000000; background: #b2ff22; }
 .tag-yellow { color: #000000; background: #fcd535; }
 .tag-red { color: #ffffff; background: #ff4d4f; }
 .tag-gray { color: #eaecef; background: #2b3139; }
-.okx-card-amt { font-size: 1.3rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
-.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
-.etf-card { background: #0c0e12; padding: 20px 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
-.etf-card:active { transform: scale(0.96); background: #121418; }
+/* 設定按鈕 */
+[data-testid="stPopover"] { display: block; }
+[data-testid="stPopover"] button { background: #0c0e12 !important; border: 1px solid #1a1d24 !important; border-radius: 6px !important; color: #eaecef !important; font-size: 0.85rem !important; padding: 6px 12px !important; transition: transform 0.1s ease; cursor: pointer; }
+[data-testid="stPopover"] button:active { transform: scale(0.92) !important; background: #1a1d24 !important; }
+
+/* 底部導航列 */
+div[data-testid="stTabs"] > div[role="tablist"] {
+    position: fixed; bottom: 0; left: 0; width: 100vw;
+    background-color: rgba(12, 14, 18, 0.95);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    z-index: 99999; border-top: 1px solid #1a1d24;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    display: flex; justify-content: space-around;
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button {
+    flex: 1; display: flex; justify-content: center;
+    color: #7a808a !important; font-weight: 500; font-size: 0.9rem !important;
+    padding: 8px 0; border: none !important; transition: transform 0.1s ease;
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
+div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
+
+/* 呼吸燈特效 */
+@keyframes neon-pulse {
+    0% { text-shadow: 0 0 0px rgba(178,255,34,0); }
+    50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;}
+    100% { text-shadow: 0 0 0px rgba(178,255,34,0); }
+}
+.pulse-text { animation: neon-pulse 1.5s infinite; }
+
+/* 提示氣泡 */
+.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px; white-space: nowrap;}
+.okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+
+/* ETF卡片 */
+.etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+.etf-card { background: #0c0e12; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
+.etf-card:active { transform: scale(0.96); }
 .etf-card-active { background: rgba(178, 255, 34, 0.03); border: 1px solid rgba(178, 255, 34, 0.2); }
-.etf-title { font-size: 0.85rem; color: #7a808a; margin-bottom: 8px; font-weight: 500;}
-.etf-rate { font-size: 1.5rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
