@@ -106,15 +106,17 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 🎯 放棄 st.columns，直接渲染標題與設定按鈕 (透過 CSS 絕對定位保護)
-st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; margin-bottom: 24px;">資金管理終端</h2>', unsafe_allow_html=True)
-
-with st.popover("設定"):
-    st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
-    st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
-    tw_full_time = get_taiwan_time(st.session_state.last_update)
-    st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
-    if st.button("強制刷新", use_container_width=True): st.rerun()
+# 🎯 標題與設定按鈕：利用新 CSS 完美同行，拔除多餘佔位
+c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
+with c_title:
+    st.markdown('<div class="app-title">資金管理終端</div>', unsafe_allow_html=True)
+with c_btn:
+    with st.popover("⚙️ 設定"):
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
+        st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
+        tw_full_time = get_taiwan_time(st.session_state.last_update)
+        st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
+        if st.button("強制刷新", use_container_width=True): st.rerun()
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
