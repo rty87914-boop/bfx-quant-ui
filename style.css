@@ -16,25 +16,26 @@ header[data-testid="stHeader"], footer, .stSpinner { display: none !important; }
 .block-container { padding-top: 1rem !important; padding-bottom: 100px !important; max-width: 1100px; overflow-x: hidden; }
 h1 a, h2 a, h3 a, .stMarkdown a { display: none !important; pointer-events: none; }
 
-/* 3. 🎯 頂部標題與設定：核彈級水平鎖死 (解決跑版) */
-div[data-testid="stHorizontalBlock"] { 
+/* 3. 🎯 頂部標題與設定：核彈級鎖死同行 (絕對不跑版) */
+div[data-testid="stHorizontalBlock"]:first-of-type { 
     display: flex !important; 
     flex-direction: row !important;
     flex-wrap: nowrap !important; 
     align-items: center !important; 
     justify-content: space-between !important;
     width: 100% !important;
+    gap: 10px !important;
 }
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"] {
     width: auto !important;
     min-width: 0 !important;
+    padding: 0 !important;
 }
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
-    flex: 1 1 auto !important;
-    overflow: hidden !important;
+div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:first-child {
+    flex: 1 1 auto !important; /* 標題佔據左側 */
 }
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
-    flex: 0 0 auto !important;
+div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:last-child {
+    flex: 0 0 auto !important; /* 按鈕緊靠右側 */
 }
 
 /* 4. 組件視覺風格與觸控回饋 */
@@ -70,9 +71,9 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
 .tag-red { color: #ffffff; background: #ff4d4f; }
 .tag-gray { color: #eaecef; background: #2b3139; }
 
-/* 設定按鈕 */
+/* 設定按鈕鎖死 */
 [data-testid="stPopover"] { display: block; margin: 0 !important; }
-[data-testid="stPopover"] button { background: #0c0e12 !important; border: 1px solid #1a1d24 !important; border-radius: 6px !important; color: #eaecef !important; font-size: 0.85rem !important; padding: 6px 12px !important; transition: transform 0.1s ease; cursor: pointer; margin: 0 !important;}
+[data-testid="stPopover"] button { background: #0c0e12 !important; border: 1px solid #1a1d24 !important; border-radius: 6px !important; color: #eaecef !important; font-size: 0.85rem !important; padding: 6px 12px !important; transition: transform 0.1s ease; cursor: pointer; margin: 0 !important; white-space: nowrap !important;}
 [data-testid="stPopover"] button:active { transform: scale(0.92) !important; background: #1a1d24 !important; }
 
 /* 底部導航列 */
@@ -92,15 +93,13 @@ div[data-testid="stTabs"] > div[role="tablist"] > button {
 div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
 div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
 
-/* 呼吸燈特效 */
+/* 呼吸燈與提示氣泡 */
 @keyframes neon-pulse {
     0% { text-shadow: 0 0 0px rgba(178,255,34,0); }
     50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;}
     100% { text-shadow: 0 0 0px rgba(178,255,34,0); }
 }
 .pulse-text { animation: neon-pulse 1.5s infinite; }
-
-/* 提示氣泡 */
 .okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px; white-space: nowrap;}
 .okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
 .okx-tooltip:hover::after {
