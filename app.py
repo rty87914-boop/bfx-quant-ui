@@ -25,24 +25,12 @@ _ = st.components.v1.html("""<script>
         if (!doc) return;
         doc.documentElement.style.background = '#000000';
         doc.body.style.background = '#000000';
-        
         const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
         oldMetas.forEach(m => m.remove());
-        
         const metaBlack = doc.createElement('meta');
         metaBlack.name = 'theme-color';
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
-        
-        const metaApple = doc.createElement('meta');
-        metaApple.name = 'apple-mobile-web-app-status-bar-style';
-        metaApple.content = 'black-translucent';
-        doc.head.appendChild(metaApple);
-        
-        const metaCapable = doc.createElement('meta');
-        metaCapable.name = 'apple-mobile-web-app-capable';
-        metaCapable.content = 'yes';
-        doc.head.appendChild(metaCapable);
     }
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
@@ -118,10 +106,10 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 🎯 頂部標題列 (嚴格控制比例)
-c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
+# 🎯 頂部導航列 (修復跑版)
+c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
-    st.markdown('<h2 class="nowrap-text" style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.3rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; white-space:nowrap;">資金管理終端</h2>', unsafe_allow_html=True)
 with c_btn:
     with st.popover("設定"):
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
@@ -138,37 +126,37 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    # 🎯 1. 核心資產數據 (修復跑版：加入安全排版與 Live 燈號內嵌)
+    # 🎯 核心資產數據 (修復 Live 燈號錯位與 TWD 斷行)
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     
     st.markdown(f"""
-    <div class="okx-panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+    <div class="okx-panel" style="margin-top:16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div class="okx-label" style="margin: 0;">聯合淨資產 (USD/USDT)</div>
-            <div style="color:#848e9c; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
+            <div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
                 <span style="display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px;"></span>Live {tw_short_time}
             </div>
         </div>
-        <div class="flex-baseline" style="margin-bottom: 16px;">
-            <div class="pulse-text okx-value-huge okx-value-mono">${data.get("total", 0):,.2f}</div>
-            <div class="nowrap-text" style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter';">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
+        <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+            <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">${data.get("total", 0):,.2f}</div>
+            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
         </div>
         <div class="stats-3-col">
-            <div><div class="okx-label">投入本金</div><div class="okx-value-mono nowrap-text" style="font-size:1.1rem; color:#fff;">{auto_p_display}</div></div>
-            <div><div class="okx-label nowrap-text">今日實現收益</div><div class="text-green okx-value-mono nowrap-text" style="font-size:1.1rem;">+${data.get("today_profit", 0):.2f}</div></div>
-            <div><div class="okx-label">累計總收益</div><div class="text-green okx-value-mono nowrap-text" style="font-size:1.1rem;">+${data.get("history", 0):,.2f}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">今日收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. 策略指標狀態 (安全雙欄網格)
+    # 策略指標狀態 (安全 2x2 網格)
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
     st.markdown(f"""
     <div class="stats-2-col">
         <div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
         <div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value-mono" style="font-size:1.3rem; color:#fff;">{data.get("active_apr", 0):.2f}%</div></div>
         <div class="status-card"><div class="okx-label">預計利息收入</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
-        <div class="status-card"><div class="okx-label nowrap-text">最近解鎖時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
+        <div class="status-card"><div class="okx-label" style="white-space:nowrap;">最近解鎖時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -243,7 +231,7 @@ def dashboard_fragment():
         else:
             total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
             stuck_count = data.get('stuck_offers_count', 0)
-            st.markdown(f"""<div class="stats-3-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label nowrap-text">總排隊金額</div><div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label nowrap-text">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">{len(offers_data)} <span style="font-size:0.75rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip nowrap-text" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.1rem;">{stuck_count} <span style="font-size:0.75rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
 
             cards_html = "<div class='okx-card-grid'>"
             for o in offers_data:
@@ -260,8 +248,9 @@ def dashboard_fragment():
         spoof_class = "text-red" if is_spoofed else "text-green"
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
+        # 🎯 修復：大盤監控改為安全 2x2 網格
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
-        st.markdown(f"""<div class="stats-3-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value nowrap-text {spoof_class}" style="font-size:1.05rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.05rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
 
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         
