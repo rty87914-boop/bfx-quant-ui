@@ -17,27 +17,42 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義 (雙重穿透 + PWA 原生化標籤) =================
 _ = st.components.v1.html("""<script>
-    try { 
-        const doc = window.parent.document;
-        doc.body.style.backgroundColor = '#000000';
-        doc.documentElement.style.backgroundColor = '#000000';
+    function forceBlackAndPWA(doc) {
+        if (!doc) return;
+        doc.documentElement.style.background = '#000000';
+        doc.body.style.background = '#000000';
         
+        // 移除舊有 Meta
         const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
         oldMetas.forEach(m => m.remove());
         
+        // 注入純黑主題
         const metaBlack = doc.createElement('meta');
         metaBlack.name = 'theme-color';
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
         
+        // 注入 PWA 隱藏網址列標籤 (讓加入主畫面變成獨立 App)
         const metaApple = doc.createElement('meta');
         metaApple.name = 'apple-mobile-web-app-status-bar-style';
         metaApple.content = 'black-translucent';
         doc.head.appendChild(metaApple);
-    } catch(e) {}
-</script>""", height=0)
+        
+        const metaCapable = doc.createElement('meta');
+        metaCapable.name = 'apple-mobile-web-app-capable';
+        metaCapable.content = 'yes';
+        doc.head.appendChild(metaCapable);
+        
+        const metaMobile = doc.createElement('meta');
+        metaMobile.name = 'mobile-web-app-capable';
+        metaMobile.content = 'yes';
+        doc.head.appendChild(metaMobile);
+    }
+    try { forceBlackAndPWA(document); } catch(e) {}
+    try { forceBlackAndPWA(window.parent.document); } catch(e) {}
+</script>""", height=0, width=0)
 
 try:
     with open("style.css", "r", encoding="utf-8") as f: st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -110,7 +125,7 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 頂部導航列
+# 頂部導航列 (強制水平對齊)
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px;">資金管理終端</h2>', unsafe_allow_html=True)
@@ -130,35 +145,32 @@ def dashboard_fragment():
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    st.toast("資料同步完成")
-    
-    # Live 狀態燈號
+    # Live 狀態燈號 (純 CSS 圓點)
     st.markdown(f"<div style='text-align:right; color:#848e9c; font-size:0.75rem; font-weight:600; margin-top:-22px; margin-bottom:12px;'><span style='display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px; margin-bottom:1px;'></span>Live {tw_short_time}</div>", unsafe_allow_html=True)
 
     # 1. 核心資產數據
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0 (零成本)"
-    st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">投入本金</div><div class="okx-value" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日實現收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="okx-panel"><div class="okx-label" style="margin-bottom:2px;">聯合淨資產 (USD/USDT)</div><div class="okx-value pulse-text okx-value-mono" style="font-size:2.8rem; margin-bottom: 24px;">${data.get("total", 0):,.2f} <span style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter';">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</span></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; border-top: 1px solid #1a1d24; padding-top: 20px;"><div><div class="okx-label">投入本金</div><div class="okx-value okx-value-mono" style="font-size:1.3rem;">{auto_p_display}</div></div><div><div class="okx-label">今日實現收益</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("today_profit", 0):.2f}</div></div><div><div class="okx-label">累計總收益</div><div class="okx-value text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("history", 0):,.2f}</div></div></div></div>""", unsafe_allow_html=True)
 
     # 2. 策略指標狀態
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
-    st.markdown(f"""<div class="status-grid" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="status-grid" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.4rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.4rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預計利息收入</div><div class="okx-value text-green okx-value-mono" style="font-size:1.4rem;">+${data.get("next_payout_total", 0):.2f}</div></div><div class="status-card"><div class="okx-label">最近解鎖時間</div><div class="okx-value" style="font-size:1.4rem;">{next_repay_str}</div></div></div>""", unsafe_allow_html=True)
 
     # 底部導航列
     tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
 
     with tab_main:
-        # --- 月度收益切換引擎 ---
+        # --- 月度收益切換引擎 (無圖表) ---
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
             df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
             df_eq = df_eq.sort_values('日期')
             df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
             
-            # 計算每個月的淨利潤
             monthly_cum = df_eq.groupby('Month')['hist_p'].last()
             monthly_profit = monthly_cum.diff().fillna(monthly_cum)
             
-            available_months = list(monthly_profit.index)[::-1] # 最新月份排在最上面
+            available_months = list(monthly_profit.index)[::-1] 
             
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             
@@ -179,7 +191,6 @@ def dashboard_fragment():
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
 
-        # --- 其他總覽區塊 ---
         current_apy = data.get('stats', {}).get('overall', {}).get('true_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
         etf_data = [{"name": "本策略 (真實年化)", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
@@ -191,7 +202,7 @@ def dashboard_fragment():
             card_class = "etf-card etf-card-active" if is_winner else "etf-card"
             sub_txt = "策略基準" if item.get("is_base") else (f"+{current_apy - item['rate']:.2f}%" if current_apy >= item['rate'] else f"{current_apy - item['rate']:.2f}%")
             sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if current_apy >= item['rate'] else "color:#ff4d4f;")
-            grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate'>{item['rate']:.2f}%</div><div style='font-size:0.8rem; margin-top:8px; font-weight:600; {sub_style}'>{sub_txt}</div></div>"
+            grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.8rem; margin-top:8px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
@@ -203,7 +214,7 @@ def dashboard_fragment():
         future_val = current_total * ((1 + current_apy/100) ** years)
         profit_gained = future_val - current_total
         
-        st.markdown(f"""<div class="okx-panel-outline" style="display:flex; justify-content:space-between; align-items:center;"><div style="color:#7a808a; font-weight:500;">{years} 年後預估</div><div style="text-align:right;"><div style="color:#b2ff22; font-size:1.6rem; font-weight:700; font-family:'JetBrains Mono', monospace;">${future_val:,.0f}</div><div style="color:#7a808a; font-size:0.85rem;">淨利潤 +${profit_gained:,.0f}</div></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="okx-panel-outline" style="display:flex; justify-content:space-between; align-items:center;"><div style="color:#7a808a; font-weight:500;">{years} 年後預估</div><div style="text-align:right;"><div style="color:#b2ff22; font-size:1.6rem; font-weight:700; font-family:'JetBrains Mono', monospace;">${future_val:,.0f}</div><div style="color:#7a808a; font-size:0.85rem; font-family:'JetBrains Mono';">淨利潤 +${profit_gained:,.0f}</div></div></div>""", unsafe_allow_html=True)
 
         o_stat = data.get('stats', {}).get('overall', {})
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
@@ -212,7 +223,7 @@ def dashboard_fragment():
         else:
             wait_str = format_time_smart(o_stat.get('wait', 0) * 3600)
             surv_str = format_time_smart(o_stat.get('survive', 0) * 3600)
-            st.markdown(f"""<div class='okx-panel'><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="精準扣除所有閒置成本與手續費後的真實獲利能力">真實等效年化 (True APY) <i>i</i></div><div class='okx-list-value text-green' style='font-size:1.3rem;'>{o_stat.get('true_apy', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均毛年化</div><div class='okx-list-value'>{o_stat.get('gross_rate', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="資金從回到錢包到下次成功借出的平均等待時間">平均撮合耗時 <i>i</i></div><div class='okx-list-value'>{wait_str}</div></div><div class='okx-list-item'><div class='okx-list-label okx-tooltip' data-tip="合約成功放貸並持續計息的平均壽命">平均存活時間 <i>i</i></div><div class='okx-list-value'>{surv_str}</div></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class='okx-panel'><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="精準扣除所有閒置成本與手續費後的真實獲利能力">真實等效年化 (True APY) <i>i</i></div><div class='okx-list-value text-green okx-value-mono' style='font-size:1.3rem;'>{o_stat.get('true_apy', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均毛年化</div><div class='okx-list-value okx-value-mono'>{o_stat.get('gross_rate', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="資金從回到錢包到下次成功借出的平均等待時間">平均撮合耗時 <i>i</i></div><div class='okx-list-value'>{wait_str}</div></div><div class='okx-list-item'><div class='okx-list-label okx-tooltip' data-tip="合約成功放貸並持續計息的平均壽命">平均存活時間 <i>i</i></div><div class='okx-list-value'>{surv_str}</div></div></div>""", unsafe_allow_html=True)
 
     with tab_loans:
         loans_data = data.get('loans', [])
@@ -221,12 +232,12 @@ def dashboard_fragment():
         else:
             total_loan_amt = sum(l.get('金額', l.get('金額 (USD)', 0)) for l in loans_data)
             total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
-            summary_html = f"""<div style="background: #121418; border-radius: 8px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總借出金額</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">${total_loan_amt:,.2f}</div></div><div><div class="okx-label">活躍合約數</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div></div><div><div class="okx-label">加權年化</div><div class="okx-value text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div><div class="okx-label">預估總日收</div><div class="okx-value text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>"""
+            summary_html = f"""<div style="background: #121418; border-radius: 8px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總借出金額</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">${total_loan_amt:,.2f}</div></div><div><div class="okx-label">活躍合約數</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div><div class="okx-label">加權年化</div><div class="okx-value text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div><div class="okx-label">預估總日收</div><div class="okx-value text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>"""
             st.markdown(summary_html, unsafe_allow_html=True)
 
             cards_html = "<div class='okx-card-grid'>"
             for l in loans_data:
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag tag-gray'>活躍</span><span class='okx-card-amt'>${l.get('金額', l.get('金額 (USD)', 0)):,.2f} <span style='font-size:0.75rem; color:#7a808a;'>{l.get('幣種', 'USD')}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>淨年化</span><span class='okx-list-value text-green okx-value-mono'>{l.get('年化 (%)', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預估日收</span><span class='okx-list-value okx-value-mono'>${l.get('預估日收', 0):.2f}</span></div><div class='okx-list-item'><span class='okx-list-label'>到期時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{l.get('到期時間', '')}</span></div></div>"
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag tag-gray'>活躍</span><span class='okx-card-amt'>${l.get('金額', l.get('金額 (USD)', 0)):,.2f} <span style='font-size:0.75rem; color:#7a808a; font-family:\"Inter\";'>{l.get('幣種', 'USD')}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>淨年化</span><span class='okx-list-value text-green okx-value-mono'>{l.get('年化 (%)', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預估日收</span><span class='okx-list-value okx-value-mono'>${l.get('預估日收', 0):.2f}</span></div><div class='okx-list-item'><span class='okx-list-label'>到期時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{l.get('到期時間', '')}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -237,7 +248,7 @@ def dashboard_fragment():
         else:
             total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
             stuck_count = data.get('stuck_offers_count', 0)
-            summary_html = f"""<div style="background: #121418; border-radius: 8px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總排隊金額</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">${total_offer_amt:,.2f}</div></div><div><div class="okx-label">排隊掛單數</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div></div><div><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="okx-value {'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div></div></div>"""
+            summary_html = f"""<div style="background: #121418; border-radius: 8px; padding: 16px; margin-top: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;"><div><div class="okx-label">總排隊金額</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">${total_offer_amt:,.2f}</div></div><div><div class="okx-label">排隊掛單數</div><div class="okx-value okx-value-mono" style="font-size:1.2rem;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="okx-value {'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>"""
             st.markdown(summary_html, unsafe_allow_html=True)
 
             cards_html = "<div class='okx-card-grid'>"
@@ -246,7 +257,7 @@ def dashboard_fragment():
                 short_status = "滯緩" if "卡單" in status_raw else ("展期" if "換倉" in status_raw else "撮合")
                 tag_class = "tag-red" if "卡單" in status_raw else ("tag-gray" if "換倉" in status_raw else "tag-yellow")
                 wait_time = parse_wait_time(o.get('排隊時間', ''))
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='okx-card-amt'>${o.get('金額', o.get('金額 (USD)', 0)):,.2f} <span style='font-size:0.75rem; color:#7a808a;'>{o.get('幣種', 'USD')}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價 (年化)</span><span class='okx-list-value okx-value-mono'>{o.get('毛年化', '')}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>合約天期</span><span class='okx-list-value'>{o.get('掛單天期', '')}</span></div><div class='okx-list-item'><span class='okx-list-label'>排隊時長</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{wait_time}</span></div></div>"
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='okx-card-amt'>${o.get('金額', o.get('金額 (USD)', 0)):,.2f} <span style='font-size:0.75rem; color:#7a808a; font-family:\"Inter\";'>{o.get('幣種', 'USD')}</span></span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價 (年化)</span><span class='okx-list-value okx-value-mono'>{o.get('毛年化', '')}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>合約天期</span><span class='okx-list-value'>{o.get('掛單天期', '')}</span></div><div class='okx-list-item'><span class='okx-list-label'>排隊時長</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{wait_time}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
