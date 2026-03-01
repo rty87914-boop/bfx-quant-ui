@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-# ⚠️ 金鑰已為空，請至 Streamlit 後台設定，以免被 GitHub 阻擋
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") 
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
@@ -107,17 +106,15 @@ def get_taiwan_time(utc_iso_str):
 # ================= 5. UI 渲染邏輯 =================
 if not SUPABASE_URL: st.stop()
 
-# 🎯 標題與設定按鈕 (依靠新 CSS 防切斷)
-c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
-with c_title:
-    st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; white-space:nowrap;">資金管理終端</h2>', unsafe_allow_html=True)
-with c_btn:
-    with st.popover("設定"):
-        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
-        st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
-        tw_full_time = get_taiwan_time(st.session_state.last_update)
-        st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
-        if st.button("強制刷新", use_container_width=True): st.rerun()
+# 🎯 放棄 st.columns，直接渲染標題與設定按鈕 (透過 CSS 絕對定位保護)
+st.markdown('<h2 style="color:#ffffff; margin:0; font-family:Inter; font-weight:700; font-size:1.4rem; letter-spacing:-0.5px; margin-bottom: 24px;">資金管理終端</h2>', unsafe_allow_html=True)
+
+with st.popover("設定"):
+    st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
+    st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
+    tw_full_time = get_taiwan_time(st.session_state.last_update)
+    st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
+    if st.button("強制刷新", use_container_width=True): st.rerun()
 
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def dashboard_fragment():
@@ -130,7 +127,7 @@ def dashboard_fragment():
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     
     st.markdown(f"""
-    <div class="okx-panel" style="margin-top:16px;">
+    <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div class="okx-label" style="margin: 0;">聯合淨資產 (USD/USDT)</div>
             <div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
@@ -250,7 +247,6 @@ def dashboard_fragment():
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
 
-        # 🤖 升級版 Groq API 觸發區 (模型已更新為 llama-3.3-70b-versatile)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         
         if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
@@ -269,7 +265,7 @@ def dashboard_fragment():
                         - 目前我的加權淨年化: {data.get('active_apr', 0)}%
                         """
                         response = client.chat.completions.create(
-                            model="llama-3.3-70b-versatile", # ✅ 已升級為官方最新支援模型
+                            model="llama-3.3-70b-versatile",
                             messages=[
                                 {"role": "system", "content": "你是一個冷靜、專業的交易員大腦，請勿使用 Emoji。"},
                                 {"role": "user", "content": prompt}
