@@ -10,44 +10,35 @@ html, body, #root, .stApp, [data-testid="stAppViewContainer"] {
     -webkit-tap-highlight-color: transparent; 
 }
 
-/* 2. 隱藏 Streamlit 原生干擾元件 */
+/* 2. 隱藏 Streamlit 原生干擾元件 (徹底拔除連結圖示) */
 header[data-testid="stHeader"], footer, .stSpinner { display: none !important; }
-[data-testid="stAppViewContainer"] > .main { background: #000000 !important; }
-.block-container { padding-top: 1rem !important; padding-bottom: 100px !important; max-width: 1100px; }
+[data-testid="stAppViewContainer"] > .main { background: #000000 !important; min-height: 100vh; }
+.block-container { padding-top: 1rem !important; padding-bottom: 100px !important; max-width: 1100px; overflow-x: hidden; }
+h1 a, h2 a, h3 a, .stMarkdown a { display: none !important; pointer-events: none; }
 
-/* 隱藏標題連結圖示 */
-.stMarkdown a, h1 a, h2 a, h3 a { display: none !important; pointer-events: none; }
-
-/* 3. 🎯 頂部導航列：強制鎖定 70% / 30% 比例，絕不跑版 */
+/* 3. 🎯 頂部標題與設定：強制水平，絕對不折行 */
 div[data-testid="stHorizontalBlock"] { 
     display: flex !important; 
     flex-wrap: nowrap !important; 
     align-items: center !important; 
+    justify-content: space-between !important;
 }
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(1) { 
-    width: 75% !important; flex: 0 0 75% !important; 
-}
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) { 
-    width: 25% !important; flex: 0 0 25% !important; 
-    display: flex; justify-content: flex-end; 
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    width: auto !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
 }
 
-/* 4. 通用排版與文字鎖定 */
-.nowrap-text { white-space: nowrap !important; }
-.flex-baseline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
-
-/* 5. 組件視覺風格與觸控回饋 */
+/* 4. 組件視覺風格與觸控回饋 */
 .okx-panel { background: #0c0e12; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #121418; transition: transform 0.15s ease; }
 .okx-panel-outline { background: transparent; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .okx-label { color: #7a808a; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; }
 .okx-value-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
-.okx-value-huge { font-size: 2.3rem; font-weight: 700; line-height: 1.1; color: #ffffff; }
-
 .text-green { color: #b2ff22 !important; }
 .text-red { color: #ff4d4f !important; }
 
-/* 網格系統 (嚴格控制手機端欄數) */
-.stats-3-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; border-top: 1px solid #1a1d24; padding-top: 16px; margin-top: 16px; }
+/* 網格系統 (2欄與3欄自適應) */
+.stats-3-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; border-top: 1px solid #1a1d24; padding-top: 16px; margin-top: 16px; }
 .stats-2-col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
 .status-card { background: #0c0e12; border-radius: 12px; padding: 14px; border: 1px solid #121418; transition: transform 0.1s ease; }
 .status-card:active { transform: scale(0.97); }
@@ -60,7 +51,7 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
 
 .okx-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 10px; }
 .okx-item-card { background: #0c0e12; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; border: 1px solid #121418; transition: transform 0.1s ease; }
-.okx-item-card:active { transform: scale(0.97); background-color: #121418; border-color: #2b3139; }
+.okx-item-card:active { transform: scale(0.97); background-color: #121418; }
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 12px; margin-bottom: 8px; }
 .okx-card-amt { font-size: 1.2rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
@@ -71,9 +62,9 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
 .tag-red { color: #ffffff; background: #ff4d4f; }
 .tag-gray { color: #eaecef; background: #2b3139; }
 
-/* 設定按鈕 */
-[data-testid="stPopover"] { display: block; }
-[data-testid="stPopover"] button { background: #0c0e12 !important; border: 1px solid #1a1d24 !important; border-radius: 6px !important; color: #eaecef !important; font-size: 0.85rem !important; padding: 6px 12px !important; transition: transform 0.1s ease; cursor: pointer; }
+/* 設定按鈕 (修復錯位) */
+[data-testid="stPopover"] { display: block; margin: 0 !important; }
+[data-testid="stPopover"] button { background: #0c0e12 !important; border: 1px solid #1a1d24 !important; border-radius: 6px !important; color: #eaecef !important; font-size: 0.85rem !important; padding: 6px 12px !important; transition: transform 0.1s ease; cursor: pointer; mairgn:0;}
 [data-testid="stPopover"] button:active { transform: scale(0.92) !important; background: #1a1d24 !important; }
 
 /* 底部導航列 */
@@ -101,9 +92,16 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 }
 .pulse-text { animation: neon-pulse 1.5s infinite; }
 
-/* 提示氣泡 */
+/* 提示氣泡 (修復被裁切問題) */
 .okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px; white-space: nowrap;}
 .okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+.okx-tooltip:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
+    background: #1e2228; color: #eaecef; padding: 8px 10px; border-radius: 6px;
+    font-size: 0.75rem; white-space: normal; width: 150px; text-align: center;
+    z-index: 999999; border: 1px solid #2b3139;
+}
 
 /* ETF卡片 */
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
