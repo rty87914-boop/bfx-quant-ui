@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") 
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 if 'ai_insight_result' not in st.session_state: st.session_state.ai_insight_result = None
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-# ================= 2. 視覺風格定義 (基礎防白邊) =================
+# ================= 2. 視覺風格定義 (基礎黑底防白邊) =================
 _ = st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -53,7 +53,6 @@ async def fetch_cached_data(session, db_id) -> dict:
     return {}
 
 async def fetch_all_auth_data() -> dict:
-    """從資料庫動態獲取使用者的密碼設定"""
     default_users = {
         "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
         "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
@@ -137,7 +136,7 @@ def get_taiwan_time(utc_iso_str):
     except:
         return str(utc_iso_str).replace("T", " ")[:19]
 
-# ================= 4. 動態登入介面 =================
+# ================= 4. 動態登入介面 (原生置中) =================
 if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
@@ -145,13 +144,16 @@ if not SUPABASE_URL:
 USERS = asyncio.run(fetch_all_auth_data())
 
 if st.session_state.logged_in_user is None:
-    # 這裡不載入 style.css，確保登入畫面絕對置中不跑版
-    st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 2, 1])
+    # 這裡絕對不載入 style.css，確保版面完美置中不跑版
+    st.markdown("<div style='text-align:center; margin-top:15vh; margin-bottom: 30px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
+    
+    # 調整手機版比例
+    c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         with st.container(border=True):
             selected_user = st.selectbox("選擇帳號", options=list(USERS.keys()), format_func=lambda x: USERS[x]["name"])
             pin_input = st.text_input("輸入密碼 (PIN)", type="password")
+            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("登入系統", use_container_width=True, type="primary"):
                 if USERS[selected_user]["pin"] == pin_input:
                     st.session_state.logged_in_user = selected_user
@@ -161,7 +163,7 @@ if st.session_state.logged_in_user is None:
     st.stop()
 
 # ================= 5. 載入面板專屬 CSS =================
-# 登入成功後才載入 CSS，保護登入畫面
+# 確定成功登入後，才允許載入排版 CSS
 try:
     with open("style.css", "r", encoding="utf-8") as f: 
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -175,7 +177,7 @@ else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
-st.columns(1) # 🛡️ 隱形盾牌：強制吸收 style.css 對第一個元素的綁架，絕對防止設定按鈕跑版
+st.columns(1) # 🛡️ 隱形盾牌：強制吸收 style.css 對第一個區塊的擠壓，保護設定按鈕
 
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
@@ -342,6 +344,40 @@ def lending_dashboard_fragment():
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
         
+        # === 恢復主理人的 AI 診斷與機器人監控功能 ===
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
+        if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
+            with st.spinner("Groq 正在極速解析大盤數據..."):
+                if not GROQ_API_KEY:
+                    st.session_state.ai_insight_result = "⚠️ 尚未設定 GROQ_API_KEY。請至 Streamlit Cloud > Settings > Secrets 貼上金鑰。"
+                else:
+                    try:
+                        import groq
+                        client = groq.Groq(api_key=GROQ_API_KEY)
+                        prompt = f"""
+                        你是一位專業的量化放貸分析師。請根據以下最新市場數據給出 50 字以內的精簡策略建議：
+                        - 當前表面 FRR: {data.get('market_frr', 0)}%
+                        - 真實成交均價 TWAP: {data.get('market_twap', 0)}%
+                        - 資金閒置率: {data.get('idle_pct', 0)}%
+                        - 目前我的加權淨年化: {data.get('active_apr', 0)}%
+                        """
+                        response = client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": "你是一個冷靜、專業的交易員大腦，請勿使用 Emoji。"},
+                                {"role": "user", "content": prompt}
+                            ],
+                            max_tokens=150
+                        )
+                        st.session_state.ai_insight_result = response.choices[0].message.content.strip()
+                    except Exception as e:
+                        st.session_state.ai_insight_result = f"Groq API 呼叫失敗: {str(e)}"
+
+        if st.session_state.ai_insight_result:
+            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">即時診斷報告 (Powered by Groq)</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
+        else:
+            st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px; text-align:center;"><div style="color: #50555e; font-size: 0.85rem; font-weight:500;">點擊上方按鈕，呼叫 Groq 執行深度分析</div></div>""", unsafe_allow_html=True)
+
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本收集載入中...</div>", unsafe_allow_html=True)
         else:
@@ -350,9 +386,20 @@ def lending_dashboard_fragment():
 
             if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
                 df['market_twap'] = df.get('market_twap', df['market_frr']).fillna(df['market_frr'])
+                win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
                 avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
+
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
-                st.markdown(f"""<div class="status-card" style="margin-bottom: 20px;"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{win_rate_twap:.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div></div>""", unsafe_allow_html=True)
+                
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>側錄操作日誌</div>", unsafe_allow_html=True)
+                cards_html = "<div class='okx-card-grid'>"
+                for _, row in df.head(10).iterrows():
+                    spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
+                    tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
+                    cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
 
 # ----------------- 模組 B：DOT 質押/融資面板 (Friend) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
@@ -373,7 +420,7 @@ def staking_dashboard_fragment():
     usd_twd_fx = user_data.get("fx", 32.0)
     total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
 
-    # 智能推算投入本金
+    # 精準還原投入本金：歷史無極限全抓的累計利息，去反推真實本金
     principal_dot = max(0.0, dot_balance - total_rewards_dot)
     
     total_usd = dot_balance * dot_price
