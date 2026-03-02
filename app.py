@@ -136,7 +136,7 @@ def get_taiwan_time(utc_iso_str):
     except:
         return str(utc_iso_str).replace("T", " ")[:19]
 
-# ================= 4. 登入介面 (加入隱形盾牌，確保絕對置中) =================
+# ================= 4. 動態登入介面 (絕對置中) =================
 if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
@@ -144,8 +144,7 @@ if not SUPABASE_URL:
 USERS = asyncio.run(fetch_all_auth_data())
 
 if st.session_state.logged_in_user is None:
-    # 這裡放一個 Dummy 欄位，用來吸收 style.css 對第一個元素的綁架
-    st.columns(1) 
+    st.columns(1) # 隱形盾牌
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
@@ -175,7 +174,8 @@ else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
-# 主面板的標題與設定按鈕，精準貼齊不換行
+st.columns(1) # 🛡️ 隱形盾牌保護設定按鈕
+
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 面板</div>', unsafe_allow_html=True)
@@ -303,6 +303,7 @@ def lending_dashboard_fragment():
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
+        # === ✅ 主理人專屬：綜合績效指標 ===
         o_stat = data.get('stats', {}).get('overall', {})
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
         if o_stat.get("is_empty"): 
@@ -347,6 +348,7 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_analytics:
+        # === ✅ 主理人專屬：市場結構與壓力 VWAP ===
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
         spoof_class = "text-red" if is_spoofed else "text-green"
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
@@ -354,6 +356,7 @@ def lending_dashboard_fragment():
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
         
+        # === ✅ 主理人專屬：AI 大腦診斷 ===
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
             with st.spinner("Groq 正在極速解析大盤數據..."):
@@ -397,11 +400,12 @@ def lending_dashboard_fragment():
                 df['market_twap'] = df.get('market_twap', df['market_frr']).fillna(df['market_frr'])
                 win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
                 avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
-
+                
+                # === ✅ 主理人專屬：策略對標與操作日誌 ===
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
                 st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{win_rate_twap:.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div></div>""", unsafe_allow_html=True)
                 
-                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>操作日誌</div>", unsafe_allow_html=True)
+                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>側錄操作日誌</div>", unsafe_allow_html=True)
                 cards_html = "<div class='okx-card-grid'>"
                 for _, row in df.head(10).iterrows():
                     spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
@@ -465,7 +469,7 @@ def staking_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>放貸績效與匯率</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>質押績效與匯率</div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class="stats-2-col">
         <div class="status-card"><div class="okx-label">設定預期 APY</div><div class="okx-value-mono text-green" style="font-size:1.4rem;">{user_apy:.1f}%</div></div>
@@ -475,7 +479,7 @@ def staking_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>累積放貸/質押獎勵</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>累積質押獎勵結算</div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class='okx-panel' style='padding: 16px;'>
         <div class='okx-list-item border-bottom'>
