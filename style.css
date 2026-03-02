@@ -113,11 +113,49 @@ div[data-testid="stTabs"] > div[role="tablist"] > button { flex: 1; display: fle
 div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
 div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
 
-/* 特效與提示氣泡 */
+/* 特效與提示氣泡 (修復版) */
 @keyframes neon-pulse { 0% { text-shadow: 0 0 0px rgba(178,255,34,0); } 50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;} 100% { text-shadow: 0 0 0px rgba(178,255,34,0); } }
 .pulse-text { animation: neon-pulse 1.5s infinite; }
-.okx-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; padding-bottom: 1px; white-space: nowrap;}
-.okx-tooltip i { font-size: 0.7rem; color: #50555e; font-style: normal; font-family: monospace; border: 1px solid #50555e; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;}
+
+.okx-tooltip { 
+    position: relative; cursor: help; display: inline-flex; 
+    align-items: center; gap: 4px; border-bottom: 1px dotted #50555e; 
+    padding-bottom: 1px; white-space: nowrap;
+}
+.okx-tooltip i { 
+    font-size: 0.7rem; color: #50555e; font-style: normal; 
+    font-family: monospace; border: 1px solid #50555e; 
+    border-radius: 50%; width: 14px; height: 14px; 
+    display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* Tooltip 文字方塊的生成與顯示邏輯 */
+.okx-tooltip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #e6e8eb;
+    color: #000000;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    pointer-events: none;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+}
+.okx-tooltip:hover::after, .okx-tooltip:active::after {
+    opacity: 1;
+    visibility: visible;
+    bottom: 150%;
+}
 
 /* ETF卡片 */
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
