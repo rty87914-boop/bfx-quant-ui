@@ -53,7 +53,6 @@ async def fetch_cached_data(session, db_id) -> dict:
     return {}
 
 async def fetch_all_auth_data() -> dict:
-    """從資料庫動態獲取使用者的密碼設定"""
     default_users = {
         "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
         "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
@@ -62,11 +61,8 @@ async def fetch_all_auth_data() -> dict:
     
     async with aiohttp.ClientSession() as session:
         r1, r2 = await asyncio.gather(fetch_cached_data(session, 1), fetch_cached_data(session, 2))
-        
-        # 用資料庫的設定覆蓋預設 PIN 碼
         if r1.get('settings', {}).get('pin'): default_users["mingyu"]["pin"] = str(r1['settings']['pin'])
         if r2.get('settings', {}).get('pin'): default_users["friend"]["pin"] = str(r2['settings']['pin'])
-        
         return default_users
 
 async def update_user_settings(db_id: int, new_settings: dict):
@@ -145,13 +141,10 @@ if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
 
-# 動態獲取最新帳號與密碼清單
 USERS = asyncio.run(fetch_all_auth_data())
 
 if st.session_state.logged_in_user is None:
-    # 登入畫面：不載入 style.css，保持原生置中排版
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
-    
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         with st.container(border=True):
@@ -166,7 +159,6 @@ if st.session_state.logged_in_user is None:
     st.stop()
 
 # ================= 5. 載入面板專屬 CSS =================
-# 確定登入後，才載入排版 CSS，避免影響登入畫面
 try:
     with open("style.css", "r", encoding="utf-8") as f: 
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -174,16 +166,14 @@ except FileNotFoundError: pass
 
 user_info = USERS[st.session_state.logged_in_user]
 
-# 預先加載專屬資料 (為了能在設定選單顯示舊資料)
 if user_info["role"] == "staking":
     user_data = asyncio.run(fetch_all_data_staking())
 else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
-st.columns(1) # 🛡️ 隱形盾牌：吸收 style.css 對第一個元素的綁架，解決設定按鈕跑版
+st.columns(1) # 🛡️ 隱形盾牌：防止設定按鈕跑版
 
-# 🎯 標題與設定按鈕：完美同行
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 面板</div>', unsafe_allow_html=True)
@@ -192,7 +182,6 @@ with c_btn:
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        # --- DOT 專屬 API 與策略設定 ---
         if user_info["role"] == "staking":
             st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
             st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>API 與策略設定</div>", unsafe_allow_html=True)
@@ -212,7 +201,6 @@ with c_btn:
                 st.success("儲存成功！背景 Worker 將自動套用。")
                 st.rerun()
 
-        # --- 共用：修改密碼功能 ---
         st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>安全設定</div>", unsafe_allow_html=True)
         new_pin = st.text_input("設定新密碼 (PIN)", type="password")
@@ -363,7 +351,7 @@ def lending_dashboard_fragment():
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
                 st.markdown(f"""<div class="status-card" style="margin-bottom: 20px;"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div>""", unsafe_allow_html=True)
 
-# ----------------- 模組 B：DOT 質押面板 (Friend) -----------------
+# ----------------- 模組 B：DOT 質押 (融資) 面板 (Friend) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
     global user_data
@@ -380,11 +368,14 @@ def staking_dashboard_fragment():
     dot_balance = user_data.get("dot_balance", 0.0)
     dot_price = user_data.get("dot_price_usd", 0.0)
     usd_twd_fx = user_data.get("fx", 32.0)
+    total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
+
+    # 推算本金：總餘額扣掉賺來的利息 (如果剛開始放貸，可能本金 = 總額)
+    principal_dot = max(0.0, dot_balance - total_rewards_dot)
     
     total_usd = dot_balance * dot_price
     total_twd = total_usd * usd_twd_fx
     
-    total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
     rewards_usd = total_rewards_dot * dot_price
     rewards_twd = rewards_usd * usd_twd_fx
 
@@ -393,42 +384,45 @@ def staking_dashboard_fragment():
     daily_reward_twd = daily_reward_usd * usd_twd_fx
 
     if dot_balance == 0 and not settings.get('api_key'):
-        st.info("💡 提示：點擊右上方「⚙️ 設定」，輸入您的 Bitfinex API 金鑰即可自動讀取 DOT 質押庫存。")
+        st.info("💡 提示：點擊右上方「⚙️ 設定」，輸入您的 Bitfinex API 金鑰即可自動讀取 DOT 質押與放貸庫存。")
         return
 
+    # 改成類似主理人面板的三欄式結構，清楚顯示「投入本金」與「累計利息」
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div class="okx-label" style="margin: 0;">目前質押總資產 (DOT)</div>
+            <div class="okx-label" style="margin: 0;">目前帳戶總資產 (DOT)</div>
             <div style="color:#e6007a; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
                 <span style="display:inline-block; width:6px; height:6px; background-color:#e6007a; border-radius:50%; margin-right:4px;"></span>即時匯率 {tw_short_time}
             </div>
         </div>
         <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
-            <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">{dot_balance:,.2f} <span style="font-size:1.2rem; color:#7a808a;">DOT</span></div>
+            <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">{dot_balance:,.2f}</div>
+            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ ${total_usd:,.2f} USD</div>
         </div>
-        <div class="stats-2-col" style="border-top: 1px solid #1a1d24; padding-top: 16px; margin-bottom: 0;">
-            <div><div class="okx-label" style="white-space:nowrap;">等值美金 (USD)</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_usd:,.2f}</div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">等值台幣 (TWD)</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">≈ NT$ {int(total_twd):,}</div></div>
+        <div class="stats-3-col" style="margin-top:0;">
+            <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{principal_dot:,.2f} <span style="font-size:0.75rem; color:#7a808a;">DOT</span></div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">累計利息</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+{total_rewards_dot:,.4f} <span style="font-size:0.75rem; color:#7a808a;">DOT</span></div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">總等值台幣</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">≈ {int(total_twd):,}</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>質押績效與匯率</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>放貸績效與匯率</div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class="stats-2-col">
-        <div class="status-card"><div class="okx-label">設定 APY</div><div class="okx-value-mono text-green" style="font-size:1.4rem;">{user_apy:.1f}%</div></div>
+        <div class="status-card"><div class="okx-label">設定預期 APY</div><div class="okx-value-mono text-green" style="font-size:1.4rem;">{user_apy:.1f}%</div></div>
         <div class="status-card"><div class="okx-label okx-tooltip" data-tip="基於設定 APY 計算">預估日收 (DOT) <i>i</i></div><div class="okx-value-mono text-green" style="font-size:1.4rem;">+{daily_reward_dot:.4f}</div></div>
         <div class="status-card"><div class="okx-label">DOT / USD</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${dot_price:.4f}</div></div>
         <div class="status-card"><div class="okx-label">USD / TWD</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{usd_twd_fx:.2f}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>累積質押獎勵結算</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>累積放貸/質押獎勵</div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class='okx-panel' style='padding: 16px;'>
         <div class='okx-list-item border-bottom'>
-            <div class='okx-list-label'>累計獲得 (DOT)</div>
+            <div class='okx-list-label'>純利息獲得 (DOT)</div>
             <div class='okx-list-value text-green okx-value-mono' style='font-size:1.3rem;'>+{total_rewards_dot:,.4f}</div>
         </div>
         <div class='okx-list-item border-bottom'>
