@@ -276,10 +276,18 @@ def lending_dashboard_fragment():
     """, unsafe_allow_html=True)
 
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
+    
+    # 🎯 計算即時 Alpha 溢價
+    active_apr = data.get("active_apr", 0)
+    market_twap = data.get("market_twap", 0)
+    alpha_premium = active_apr - market_twap
+    alpha_color = "text-green" if alpha_premium >= 0 else "text-red"
+    alpha_sign = "+" if alpha_premium >= 0 else ""
+
     st.markdown(f"""
     <div class="stats-2-col">
         <div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
-        <div class="status-card"><div class="okx-label okx-tooltip" data-tip="目前所有借出資金的加權淨年化">當前淨年化 <i>i</i></div><div class="okx-value-mono" style="font-size:1.3rem; color:#fff;">{data.get("active_apr", 0):.2f}%</div></div>
+        <div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">即時 Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
         <div class="status-card"><div class="okx-label">預計利息收入</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
         <div class="status-card"><div class="okx-label" style="white-space:nowrap;">最近解鎖時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
     </div>
@@ -310,17 +318,18 @@ def lending_dashboard_fragment():
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
 
-        current_apy = data.get('stats', {}).get('overall', {}).get('true_apy', 0)
+        # 🎯 標竿對比：換上帳戶真實年化 (hist_apy)
+        account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
-        etf_data = [{"name": "本策略 (真實)", "rate": current_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
+        etf_data = [{"name": "帳戶年化 (自2/11)", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
         max_rate = max([item["rate"] for item in etf_data])
 
         grid_html = "<div class='etf-grid'>"
         for item in etf_data:
             is_winner = (item["rate"] == max_rate)
             card_class = "etf-card etf-card-active" if is_winner else "etf-card"
-            sub_txt = "策略基準" if item.get("is_base") else (f"+{current_apy - item['rate']:.2f}%" if current_apy >= item['rate'] else f"{current_apy - item['rate']:.2f}%")
-            sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if current_apy >= item['rate'] else "color:#ff4d4f;")
+            sub_txt = "策略基準" if item.get("is_base") else (f"+{account_apy - item['rate']:.2f}%" if account_apy >= item['rate'] else f"{account_apy - item['rate']:.2f}%")
+            sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if account_apy >= item['rate'] else "color:#ff4d4f;")
             grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.75rem; margin-top:6px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
@@ -415,22 +424,19 @@ def lending_dashboard_fragment():
             df = pd.DataFrame(decisions)
             df['時間'] = pd.to_datetime(df.get('created_at', pd.Series(range(len(df))))).dt.tz_convert('Asia/Taipei') if 'created_at' in df.columns else pd.Series(range(len(df)))
 
-            if 'market_frr' in df.columns and 'bot_rate_yearly' in df.columns:
-                df['market_twap'] = df.get('market_twap', df['market_frr']).fillna(df['market_frr'])
-                win_rate_twap = (len(df[df['bot_rate_yearly'] >= df['market_twap']]) / len(df)) * 100 if len(df) > 0 else 0
-                avg_spread_twap = (df['bot_rate_yearly'] - df['market_twap']).mean()
-
-                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
-                st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="報價成功超越真實成交基準的比例">勝率 (對標 TWAP) <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{win_rate_twap:.1f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div></div>""", unsafe_allow_html=True)
-                
-                st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>側錄操作日誌</div>", unsafe_allow_html=True)
-                cards_html = "<div class='okx-card-grid'>"
-                for _, row in df.head(10).iterrows():
-                    spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
-                    tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
-                    cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''}</span></div></div>"
-                cards_html += "</div>"
-                st.markdown(cards_html, unsafe_allow_html=True)
+            # 🎯 取代掉原本的對標分析，換成更乾淨的「目前側錄筆數」
+            total_logged = data.get('logged_decisions_count', len(df))
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本</div>", unsafe_allow_html=True)
+            st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="累積側錄的市場與報價決策總數">目前側錄筆數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+            
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>側錄操作日誌</div>", unsafe_allow_html=True)
+            cards_html = "<div class='okx-card-grid'>"
+            for _, row in df.head(10).iterrows():
+                spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
+                tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''}</span></div></div>"
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
 
 # ----------------- 模組 B：DOT 淨本金面板 (Friend) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
