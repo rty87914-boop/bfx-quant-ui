@@ -140,9 +140,14 @@ if not SUPABASE_URL:
     st.stop()
 
 if st.session_state.logged_in_user is None:
-    st.markdown("<div style='text-align:center; margin-top:100px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
+    # 建立一個隱形的 Dummy 區塊，用來吸收 style.css 裡 first-of-type 的 CSS 綁架
+    st.columns(1)
+    
+    st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
+    
+    # 手機端保持微小邊距 (0.5)，中間區塊放滿 (9)，完美解決跑版問題
+    c1, c2, c3 = st.columns([0.5, 9, 0.5])
+    with c2:
         with st.container(border=True):
             selected_user = st.selectbox("選擇帳號", options=list(USERS.keys()), format_func=lambda x: USERS[x]["name"])
             pin_input = st.text_input("輸入 PIN 碼", type="password")
@@ -164,7 +169,7 @@ else:
 
 # ================= 5. UI 渲染邏輯 =================
 
-# 🎯 標題與設定按鈕
+# 🎯 標題與設定按鈕：完美同行，絕不切邊
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 面板</div>', unsafe_allow_html=True)
