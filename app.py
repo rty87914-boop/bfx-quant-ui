@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "") 
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 if 'ai_insight_result' not in st.session_state: st.session_state.ai_insight_result = None
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-# ================= 2. 視覺風格定義 (基礎黑底) =================
+# ================= 2. 視覺風格定義 (基礎防白邊) =================
 _ = st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -53,6 +53,7 @@ async def fetch_cached_data(session, db_id) -> dict:
     return {}
 
 async def fetch_all_auth_data() -> dict:
+    """從資料庫動態獲取使用者的密碼設定"""
     default_users = {
         "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
         "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
@@ -144,6 +145,7 @@ if not SUPABASE_URL:
 USERS = asyncio.run(fetch_all_auth_data())
 
 if st.session_state.logged_in_user is None:
+    # 這裡不載入 style.css，確保登入畫面絕對置中不跑版
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
@@ -159,6 +161,7 @@ if st.session_state.logged_in_user is None:
     st.stop()
 
 # ================= 5. 載入面板專屬 CSS =================
+# 登入成功後才載入 CSS，保護登入畫面
 try:
     with open("style.css", "r", encoding="utf-8") as f: 
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -172,7 +175,7 @@ else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
-st.columns(1) # 🛡️ 隱形盾牌：防止設定按鈕跑版
+st.columns(1) # 🛡️ 隱形盾牌：強制吸收 style.css 對第一個元素的綁架，絕對防止設定按鈕跑版
 
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
@@ -351,7 +354,7 @@ def lending_dashboard_fragment():
                 st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>策略對標分析</div>", unsafe_allow_html=True)
                 st.markdown(f"""<div class="status-card" style="margin-bottom: 20px;"><div class="okx-label okx-tooltip" data-tip="機器人比市場平均多賺取的溢價">真 Alpha 報酬 <i>i</i></div><div class="{'text-green' if avg_spread_twap >=0 else 'text-red'} okx-value-mono" style="font-size:1.2rem;">{avg_spread_twap:+.2f}%</div></div>""", unsafe_allow_html=True)
 
-# ----------------- 模組 B：DOT 質押 (融資) 面板 (Friend) -----------------
+# ----------------- 模組 B：DOT 質押/融資面板 (Friend) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
     global user_data
@@ -370,7 +373,7 @@ def staking_dashboard_fragment():
     usd_twd_fx = user_data.get("fx", 32.0)
     total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
 
-    # 推算本金：總餘額扣掉賺來的利息 (如果剛開始放貸，可能本金 = 總額)
+    # 智能推算投入本金
     principal_dot = max(0.0, dot_balance - total_rewards_dot)
     
     total_usd = dot_balance * dot_price
@@ -384,10 +387,10 @@ def staking_dashboard_fragment():
     daily_reward_twd = daily_reward_usd * usd_twd_fx
 
     if dot_balance == 0 and not settings.get('api_key'):
-        st.info("💡 提示：點擊右上方「⚙️ 設定」，輸入您的 Bitfinex API 金鑰即可自動讀取 DOT 質押與放貸庫存。")
+        st.info("💡 提示：點擊右上方「⚙️ 設定」，輸入您的 Bitfinex API 金鑰即可自動讀取 DOT 放貸與質押庫存。")
         return
 
-    # 改成類似主理人面板的三欄式結構，清楚顯示「投入本金」與「累計利息」
+    # DOT 專屬面板：三欄式呈現 本金 / 利息 / 總額
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
