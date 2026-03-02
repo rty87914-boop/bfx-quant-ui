@@ -21,13 +21,7 @@ if 'last_update' not in st.session_state: st.session_state.last_update = "尚未
 if 'ai_insight_result' not in st.session_state: st.session_state.ai_insight_result = None
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-# 使用者驗證資料 (可根據需求修改 PIN 碼)
-USERS = {
-    "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
-    "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
-}
-
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義 (基礎黑底) =================
 _ = st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -44,10 +38,6 @@ _ = st.components.v1.html("""<script>
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
 </script>""", height=0, width=0)
 
-try:
-    with open("style.css", "r", encoding="utf-8") as f: st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError: pass
-
 # ================= 3. 資料獲取與設定引擎 =================
 async def fetch_cached_data(session, db_id) -> dict:
     if not SUPABASE_URL: return {}
@@ -57,20 +47,36 @@ async def fetch_cached_data(session, db_id) -> dict:
             if res.status == 200:
                 data = await res.json()
                 if data:
-                    st.session_state.last_update = data[0].get('updated_at', '尚未同步')
+                    if db_id == 1: st.session_state.last_update = data[0].get('updated_at', '尚未同步')
                     return data[0].get('payload', {})
     except Exception: pass
     return {}
+
+async def fetch_all_auth_data() -> dict:
+    """從資料庫動態獲取使用者的密碼設定"""
+    default_users = {
+        "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
+        "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
+    }
+    if not SUPABASE_URL: return default_users
+    
+    async with aiohttp.ClientSession() as session:
+        r1, r2 = await asyncio.gather(fetch_cached_data(session, 1), fetch_cached_data(session, 2))
+        
+        # 用資料庫的設定覆蓋預設 PIN 碼
+        if r1.get('settings', {}).get('pin'): default_users["mingyu"]["pin"] = str(r1['settings']['pin'])
+        if r2.get('settings', {}).get('pin'): default_users["friend"]["pin"] = str(r2['settings']['pin'])
+        
+        return default_users
 
 async def update_user_settings(db_id: int, new_settings: dict):
     if not SUPABASE_URL: return False
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates"}
     async with aiohttp.ClientSession() as session:
-        # 先抓取當前資料避免覆蓋 Worker 的運算結果
         current_payload = await fetch_cached_data(session, db_id)
         current_settings = current_payload.get('settings', {})
+        if not isinstance(current_settings, dict): current_settings = {}
         
-        # 合併新設定
         current_settings.update(new_settings)
         current_payload['settings'] = current_settings
         
@@ -134,30 +140,37 @@ def get_taiwan_time(utc_iso_str):
     except:
         return str(utc_iso_str).replace("T", " ")[:19]
 
-# ================= 4. 登入介面 =================
+# ================= 4. 動態登入介面 =================
 if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
 
+# 動態獲取最新帳號與密碼清單
+USERS = asyncio.run(fetch_all_auth_data())
+
 if st.session_state.logged_in_user is None:
-    # 建立一個隱形的 Dummy 區塊，用來吸收 style.css 裡 first-of-type 的 CSS 綁架
-    st.columns(1)
-    
+    # 登入畫面：不載入 style.css，保持原生置中排版
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
     
-    # 手機端保持微小邊距 (0.5)，中間區塊放滿 (9)，完美解決跑版問題
-    c1, c2, c3 = st.columns([0.5, 9, 0.5])
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         with st.container(border=True):
             selected_user = st.selectbox("選擇帳號", options=list(USERS.keys()), format_func=lambda x: USERS[x]["name"])
-            pin_input = st.text_input("輸入 PIN 碼", type="password")
+            pin_input = st.text_input("輸入密碼 (PIN)", type="password")
             if st.button("登入系統", use_container_width=True, type="primary"):
                 if USERS[selected_user]["pin"] == pin_input:
                     st.session_state.logged_in_user = selected_user
                     st.rerun()
                 else:
-                    st.error("PIN 碼錯誤，請重試。")
+                    st.error("密碼錯誤，請重試。")
     st.stop()
+
+# ================= 5. 載入面板專屬 CSS =================
+# 確定登入後，才載入排版 CSS，避免影響登入畫面
+try:
+    with open("style.css", "r", encoding="utf-8") as f: 
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError: pass
 
 user_info = USERS[st.session_state.logged_in_user]
 
@@ -167,7 +180,7 @@ if user_info["role"] == "staking":
 else:
     user_data = {}
 
-# ================= 5. UI 渲染邏輯 =================
+# ================= 6. UI 渲染邏輯 =================
 
 # 🎯 標題與設定按鈕：完美同行，絕不切邊
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
@@ -178,7 +191,7 @@ with c_btn:
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        # DOT 專屬：自動帶入資料庫現有設定的表單
+        # --- DOT 專屬 API 與策略設定 ---
         if user_info["role"] == "staking":
             st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
             st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>API 與策略設定</div>", unsafe_allow_html=True)
@@ -188,16 +201,29 @@ with c_btn:
             new_key = st.text_input("Bitfinex API Key", value=saved_settings.get('api_key', ''), type="password")
             new_secret = st.text_input("Bitfinex API Secret", value=saved_settings.get('api_secret', ''), type="password")
             
-            if st.button("儲存並更新金鑰", use_container_width=True, type="primary"):
-                with st.spinner("正在安全寫入資料庫..."):
+            if st.button("更新策略與金鑰", use_container_width=True, type="primary"):
+                with st.spinner("正在安全寫入..."):
                     asyncio.run(update_user_settings(user_info["db_id"], {
                         "apy": new_apy,
                         "api_key": new_key,
                         "api_secret": new_secret
                     }))
-                st.success("儲存成功！背景 Worker 將在 1 分鐘內套用新金鑰。")
+                st.success("儲存成功！背景 Worker 將自動套用。")
                 st.rerun()
 
+        # --- 共用：修改密碼功能 ---
+        st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>安全設定</div>", unsafe_allow_html=True)
+        new_pin = st.text_input("設定新密碼 (PIN)", type="password")
+        if st.button("修改登入密碼", use_container_width=True):
+            if new_pin and len(new_pin) >= 4:
+                with st.spinner("更新密碼中..."):
+                    asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin}))
+                st.success("密碼修改成功！下次登入請使用新密碼。")
+            else:
+                st.warning("密碼至少需要 4 個字元")
+
+        st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
         tw_full_time = get_taiwan_time(st.session_state.last_update)
         st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
         if st.button("強制刷新畫面", use_container_width=True): st.rerun()
