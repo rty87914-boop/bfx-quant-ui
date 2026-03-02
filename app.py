@@ -321,7 +321,7 @@ def lending_dashboard_fragment():
         # 🎯 標竿對比：換上帳戶真實年化 (hist_apy)
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
-        etf_data = [{"name": "帳戶年化 (自2/11)", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
+        etf_data = [{"name": "帳戶年化", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
         max_rate = max([item["rate"] for item in etf_data])
 
         grid_html = "<div class='etf-grid'>"
