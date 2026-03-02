@@ -136,13 +136,24 @@ def get_taiwan_time(utc_iso_str):
     except:
         return str(utc_iso_str).replace("T", " ")[:19]
 
-# ================= 4. 動態登入介面 (絕對置中) =================
+# ================= 4. 動態登入介面 (支援捷徑免密碼) =================
 if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
 
 USERS = asyncio.run(fetch_all_auth_data())
 
+# 🚀 讀取網址列的 Magic Link 參數 (免密碼自動登入)
+query_user = st.query_params.get("user")
+query_pin = st.query_params.get("pin")
+
+if st.session_state.logged_in_user is None:
+    # 驗證網址列授權是否正確
+    if query_user in USERS and USERS[query_user]["pin"] == query_pin:
+        st.session_state.logged_in_user = query_user
+        st.rerun()
+
+# 如果還是未登入狀態，顯示登入畫面
 if st.session_state.logged_in_user is None:
     st.columns(1) # 隱形盾牌
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
@@ -155,6 +166,11 @@ if st.session_state.logged_in_user is None:
             if st.button("登入系統", use_container_width=True, type="primary"):
                 if USERS[selected_user]["pin"] == pin_input:
                     st.session_state.logged_in_user = selected_user
+                    
+                    # 🚀 登入成功，將授權參數寫入網址列形成 Magic Link
+                    st.query_params["user"] = selected_user
+                    st.query_params["pin"] = pin_input
+                    
                     st.rerun()
                 else:
                     st.error("密碼錯誤，請重試。")
@@ -184,6 +200,9 @@ with c_btn:
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
+        # 💡 提示用戶如何利用 Magic Link 免密碼登入
+        st.info("📌 **免密碼密技**：目前的網址已自帶專屬安全碼，您可以直接將本網頁「加入主畫面」或「加入書籤」，下次開啟即可免打密碼直接登入！")
+        
         if user_info["role"] == "staking":
             st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
             st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>API 與策略設定</div>", unsafe_allow_html=True)
@@ -210,6 +229,8 @@ with c_btn:
             if new_pin and len(new_pin) >= 4:
                 with st.spinner("更新密碼中..."):
                     asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin.strip()}))
+                # 同步更新網址列上的 Magic Link 密碼
+                st.query_params["pin"] = new_pin.strip()
                 st.success("密碼修改成功！下次登入請使用新密碼。")
             else:
                 st.warning("密碼至少需要 4 個字元")
@@ -220,6 +241,7 @@ with c_btn:
         if st.button("強制刷新畫面", use_container_width=True): st.rerun()
         if st.button("登出系統", use_container_width=True): 
             st.session_state.logged_in_user = None
+            st.query_params.clear() # 登出時清空安全授權
             st.rerun()
 
 # ----------------- 模組 A：量解放貸面板 (Ming Yu) -----------------
