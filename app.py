@@ -48,7 +48,7 @@ try:
     with open("style.css", "r", encoding="utf-8") as f: st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError: pass
 
-# ================= 3. 資料獲取引擎 =================
+# ================= 3. 資料獲取與設定引擎 =================
 async def fetch_cached_data(session, db_id) -> dict:
     if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -61,6 +61,25 @@ async def fetch_cached_data(session, db_id) -> dict:
                     return data[0].get('payload', {})
     except Exception: pass
     return {}
+
+async def update_user_settings(db_id: int, new_settings: dict):
+    if not SUPABASE_URL: return False
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates"}
+    async with aiohttp.ClientSession() as session:
+        # 先抓取當前資料避免覆蓋 Worker 的運算結果
+        current_payload = await fetch_cached_data(session, db_id)
+        current_settings = current_payload.get('settings', {})
+        
+        # 合併新設定
+        current_settings.update(new_settings)
+        current_payload['settings'] = current_settings
+        
+        update_body = {"id": db_id, "payload": current_payload, "updated_at": datetime.utcnow().isoformat()}
+        try:
+            async with session.post(f"{SUPABASE_URL}/rest/v1/system_cache?on_conflict=id", headers=headers, json=update_body) as res:
+                if res.status in (200, 201, 204): return True
+        except Exception: pass
+    return False
 
 async def fetch_bot_decisions(session) -> list:
     if not SUPABASE_URL: return []
@@ -137,26 +156,47 @@ if st.session_state.logged_in_user is None:
 
 user_info = USERS[st.session_state.logged_in_user]
 
+# 預先加載專屬資料 (為了能在設定選單顯示舊資料)
+if user_info["role"] == "staking":
+    user_data = asyncio.run(fetch_all_data_staking())
+else:
+    user_data = {}
+
 # ================= 5. UI 渲染邏輯 =================
 
-# 🎯 標題與設定按鈕：完美同行，絕不切邊
+# 🎯 標題與設定按鈕
 c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 面板</div>', unsafe_allow_html=True)
 with c_btn:
     with st.popover("⚙️ 設定"):
-        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統設定</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        # DOT 專屬設定
+        # DOT 專屬：自動帶入資料庫現有設定的表單
         if user_info["role"] == "staking":
-            if 'dot_apy' not in st.session_state: st.session_state.dot_apy = 15.0
-            st.session_state.dot_apy = st.number_input("輸入預期 APY (%)", value=st.session_state.dot_apy, step=0.5, format="%.2f")
+            st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>API 與策略設定</div>", unsafe_allow_html=True)
+            
+            saved_settings = user_data.get('settings', {})
+            new_apy = st.number_input("預期 APY (%)", value=float(saved_settings.get('apy', 15.0)), step=0.5, format="%.2f")
+            new_key = st.text_input("Bitfinex API Key", value=saved_settings.get('api_key', ''), type="password")
+            new_secret = st.text_input("Bitfinex API Secret", value=saved_settings.get('api_secret', ''), type="password")
+            
+            if st.button("儲存並更新金鑰", use_container_width=True, type="primary"):
+                with st.spinner("正在安全寫入資料庫..."):
+                    asyncio.run(update_user_settings(user_info["db_id"], {
+                        "apy": new_apy,
+                        "api_key": new_key,
+                        "api_secret": new_secret
+                    }))
+                st.success("儲存成功！背景 Worker 將在 1 分鐘內套用新金鑰。")
+                st.rerun()
 
         tw_full_time = get_taiwan_time(st.session_state.last_update)
         st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>背景同步: {tw_full_time}</div>", unsafe_allow_html=True)
-        if st.button("強制刷新", use_container_width=True): st.rerun()
-        if st.button("登出", use_container_width=True): 
+        if st.button("強制刷新畫面", use_container_width=True): st.rerun()
+        if st.button("登出系統", use_container_width=True): 
             st.session_state.logged_in_user = None
             st.rerun()
 
@@ -294,30 +334,35 @@ def lending_dashboard_fragment():
 # ----------------- 模組 B：DOT 質押面板 (Friend) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
-    data = asyncio.run(fetch_all_data_staking())
-    if not data: 
-        st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>等待背景 Worker 同步資料...</div>", unsafe_allow_html=True)
+    global user_data
+    if not user_data: 
+        st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>請先至上方「⚙️ 設定」輸入您的 API 金鑰，等待 Worker 同步資料...</div>", unsafe_allow_html=True)
         return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
     tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
     
-    dot_balance = data.get("dot_balance", 0.0)
-    dot_price = data.get("dot_price_usd", 0.0)
-    usd_twd_fx = data.get("fx", 32.0)
+    settings = user_data.get("settings", {})
+    user_apy = float(settings.get("apy", 15.0))
+
+    dot_balance = user_data.get("dot_balance", 0.0)
+    dot_price = user_data.get("dot_price_usd", 0.0)
+    usd_twd_fx = user_data.get("fx", 32.0)
     
     total_usd = dot_balance * dot_price
     total_twd = total_usd * usd_twd_fx
     
-    total_rewards_dot = data.get("total_rewards_dot", 0.0)
+    total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
     rewards_usd = total_rewards_dot * dot_price
     rewards_twd = rewards_usd * usd_twd_fx
 
-    # 讀取使用者設定的 APY 來推算每日收益
-    user_apy = st.session_state.get('dot_apy', 15.0)
     daily_reward_dot = dot_balance * (user_apy / 100) / 365
     daily_reward_usd = daily_reward_dot * dot_price
     daily_reward_twd = daily_reward_usd * usd_twd_fx
+
+    if dot_balance == 0 and not settings.get('api_key'):
+        st.info("💡 提示：點擊右上方「⚙️ 設定」，輸入您的 Bitfinex API 金鑰即可自動讀取 DOT 質押庫存。")
+        return
 
     st.markdown(f"""
     <div class="okx-panel">
