@@ -181,9 +181,10 @@ else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
+st.columns(1) # 🛡️ 隱形盾牌：吸收 style.css 對第一個元素的綁架，解決設定按鈕跑版
 
-# 🎯 標題與設定按鈕：完美同行，絕不切邊
-c_title, c_btn = st.columns([1, 1], vertical_alignment="center")
+# 🎯 標題與設定按鈕：完美同行
+c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 面板</div>', unsafe_allow_html=True)
 with c_btn:
@@ -205,8 +206,8 @@ with c_btn:
                 with st.spinner("正在安全寫入..."):
                     asyncio.run(update_user_settings(user_info["db_id"], {
                         "apy": new_apy,
-                        "api_key": new_key,
-                        "api_secret": new_secret
+                        "api_key": new_key.strip(),
+                        "api_secret": new_secret.strip()
                     }))
                 st.success("儲存成功！背景 Worker 將自動套用。")
                 st.rerun()
@@ -218,7 +219,7 @@ with c_btn:
         if st.button("修改登入密碼", use_container_width=True):
             if new_pin and len(new_pin) >= 4:
                 with st.spinner("更新密碼中..."):
-                    asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin}))
+                    asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin.strip()}))
                 st.success("密碼修改成功！下次登入請使用新密碼。")
             else:
                 st.warning("密碼至少需要 4 個字元")
