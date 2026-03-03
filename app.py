@@ -143,19 +143,16 @@ if not SUPABASE_URL:
 
 USERS = asyncio.run(fetch_all_auth_data())
 
-# 🚀 讀取網址列的 Magic Link 參數 (免密碼自動登入)
 query_user = st.query_params.get("user")
 query_pin = st.query_params.get("pin")
 
 if st.session_state.logged_in_user is None:
-    # 驗證網址列授權是否正確
     if query_user in USERS and USERS[query_user]["pin"] == query_pin:
         st.session_state.logged_in_user = query_user
         st.rerun()
 
-# 如果還是未登入狀態，顯示登入畫面
 if st.session_state.logged_in_user is None:
-    st.columns(1) # 隱形盾牌
+    st.columns(1) 
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
@@ -166,11 +163,8 @@ if st.session_state.logged_in_user is None:
             if st.button("登入系統", use_container_width=True, type="primary"):
                 if USERS[selected_user]["pin"] == pin_input:
                     st.session_state.logged_in_user = selected_user
-                    
-                    # 🚀 登入成功，將授權參數寫入網址列形成 Magic Link
                     st.query_params["user"] = selected_user
                     st.query_params["pin"] = pin_input
-                    
                     st.rerun()
                 else:
                     st.error("密碼錯誤，請重試。")
@@ -190,7 +184,7 @@ else:
     user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
-st.columns(1) # 🛡️ 隱形盾牌保護設定按鈕
+st.columns(1) 
 
 c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
@@ -200,7 +194,6 @@ with c_btn:
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        # 💡 提示用戶如何利用 Magic Link 免密碼登入
         st.info("📌 **免密碼密技**：目前的網址已自帶專屬安全碼，您可以直接將本網頁「加入主畫面」或「加入書籤」，下次開啟即可免打密碼直接登入！")
         
         if user_info["role"] == "staking":
@@ -229,7 +222,6 @@ with c_btn:
             if new_pin and len(new_pin) >= 4:
                 with st.spinner("更新密碼中..."):
                     asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin.strip()}))
-                # 同步更新網址列上的 Magic Link 密碼
                 st.query_params["pin"] = new_pin.strip()
                 st.success("密碼修改成功！下次登入請使用新密碼。")
             else:
@@ -241,7 +233,7 @@ with c_btn:
         if st.button("強制刷新畫面", use_container_width=True): st.rerun()
         if st.button("登出系統", use_container_width=True): 
             st.session_state.logged_in_user = None
-            st.query_params.clear() # 登出時清空安全授權
+            st.query_params.clear()
             st.rerun()
 
 # ----------------- 模組 A：量解放貸面板 (Ming Yu) -----------------
@@ -277,7 +269,6 @@ def lending_dashboard_fragment():
 
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
     
-    # 🎯 計算即時 Alpha 溢價
     active_apr = data.get("active_apr", 0)
     market_twap = data.get("market_twap", 0)
     alpha_premium = active_apr - market_twap
@@ -318,7 +309,6 @@ def lending_dashboard_fragment():
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
 
-        # 🎯 標竿對比：換上帳戶真實年化 (hist_apy)
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
         etf_data = [{"name": "帳戶年化", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
@@ -386,6 +376,16 @@ def lending_dashboard_fragment():
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
+        
+        # 🚀 新增：影子大腦即時狀態顯示框
+        ai_insight_text = data.get("ai_insight_stored", "影子大腦初始化中...")
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:16px; border-color: #b2ff22; background: rgba(178,255,34,0.05);">
+            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子大腦即時預測</div>
+            <div style="color: #b2ff22; font-size: 0.95rem; font-weight:600; font-family:'JetBrains Mono', monospace; line-height: 1.5;">{ai_insight_text}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
         if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
             with st.spinner("Groq 正在極速解析大盤數據..."):
                 if not GROQ_API_KEY:
@@ -414,17 +414,14 @@ def lending_dashboard_fragment():
                         st.session_state.ai_insight_result = f"Groq API 呼叫失敗: {str(e)}"
 
         if st.session_state.ai_insight_result:
-            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">即時診斷報告 (Powered by Groq)</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
-        else:
-            st.markdown(f"""<div class="okx-panel-outline" style="padding:16px; margin-bottom:24px; text-align:center;"><div style="color: #50555e; font-size: 0.85rem; font-weight:500;">點擊上方按鈕，呼叫 Groq 執行深度分析</div></div>""", unsafe_allow_html=True)
-
+            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">LLM 深度報告 (Powered by Groq)</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
+        
         if not decisions:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本收集載入中...</div>", unsafe_allow_html=True)
         else:
             df = pd.DataFrame(decisions)
             df['時間'] = pd.to_datetime(df.get('created_at', pd.Series(range(len(df))))).dt.tz_convert('Asia/Taipei') if 'created_at' in df.columns else pd.Series(range(len(df)))
 
-            # 🎯 取代掉原本的對標分析，換成更乾淨的「目前側錄筆數」
             total_logged = data.get('logged_decisions_count', len(df))
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本</div>", unsafe_allow_html=True)
             st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="累積側錄的市場與報價決策總數">目前側錄筆數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
