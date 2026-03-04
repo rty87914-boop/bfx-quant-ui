@@ -162,3 +162,74 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 .etf-card { background: #0c0e12; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
 .etf-card:active { transform: scale(0.96); }
 .etf-card-active { background: rgba(178, 255, 34, 0.03); border: 1px solid rgba(178, 255, 34, 0.2); }
+
+/* ================= 小卡片 (Mini Cards) 專屬網格系統 ================= */
+.mini-card-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
+    gap: 12px; 
+    margin-top: 12px; 
+}
+
+.mini-item-card { 
+    background: #0c0e12; 
+    border-radius: 10px; 
+    padding: 12px; 
+    display: flex; 
+    flex-direction: column; 
+    border: 1px solid #1a1d24; 
+    transition: transform 0.1s ease, border-color 0.2s ease; 
+    box-sizing: border-box;
+}
+
+.mini-item-card:active { 
+    transform: scale(0.96); 
+    background-color: #121418; 
+}
+
+.mini-card-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    border-bottom: 1px solid #1a1d24; 
+    padding-bottom: 8px; 
+    margin-bottom: 8px; 
+}
+
+.mini-card-amt { 
+    font-size: 1.05rem; 
+    font-weight: 700; 
+    color: #ffffff; 
+    font-family: 'JetBrains Mono', monospace; 
+}
+
+.mini-stat-row { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 4px;
+}
+
+.mini-stat-row:last-child {
+    margin-bottom: 0;
+}
+
+/* ================= 新增：特殊高亮標籤顏色 ================= */
+.tag-green-glow { 
+    color: #000000; 
+    background: #b2ff22; 
+    box-shadow: 0 0 8px rgba(178, 255, 34, 0.4);
+}
+
+.tag-red-glow { 
+    color: #ffffff; 
+    background: #ff4d4f; 
+    box-shadow: 0 0 8px rgba(255, 77, 79, 0.5);
+    font-weight: 700;
+}
+
+.tag-red-dim { 
+    color: #ffb3b3; 
+    background: rgba(255, 77, 79, 0.15); 
+    border: 1px solid rgba(255, 77, 79, 0.3);
+}
