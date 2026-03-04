@@ -342,25 +342,12 @@ def lending_dashboard_fragment():
             total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
             st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label">總借出金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">活躍合約數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權年化</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">預估總日收</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
             
-            # 🚀 升級為雙欄/三欄自適應的小卡片網格 (綠色高亮)
             cards_html = "<div class='mini-card-grid'>"
             for l in loans_data:
-                cards_html += f"""
-                <div class='mini-item-card'>
-                    <div class='mini-card-header'>
-                        <span class='okx-tag tag-green-glow'>活躍</span>
-                        <span class='mini-card-amt'>${l.get('金額', l.get('金額 (USD)', 0)):,.0f}</span>
-                    </div>
-                    <div class='mini-stat-row'>
-                        <span class='okx-list-label'>淨年化</span>
-                        <span class='text-green okx-value-mono' style='font-size:0.9rem;'>{l.get('年化 (%)', 0):.2f}%</span>
-                    </div>
-                    <div class='mini-stat-row'>
-                        <span class='okx-list-label'>到期</span>
-                        <span style='color:#848e9c; font-size:0.8rem; font-family: "JetBrains Mono";'>{l.get('到期時間', '')[5:]}</span>
-                    </div>
-                </div>
-                """
+                amt = l.get('金額', l.get('金額 (USD)', 0))
+                rate = l.get('年化 (%)', 0)
+                exp = l.get('到期時間', '')[5:]
+                cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>活躍</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>到期</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -373,31 +360,15 @@ def lending_dashboard_fragment():
             stuck_count = data.get('stuck_offers_count', 0)
             st.markdown(f"""<div class="stats-3-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
 
-            # 🚀 升級為雙欄/三欄自適應的小卡片網格 (紅色高亮/暗紅)
             cards_html = "<div class='mini-card-grid'>"
             for o in offers_data:
                 status_raw = o.get('狀態', '')
                 short_status = "滯緩" if "卡單" in status_raw else ("展期" if "換倉" in status_raw else "撮合")
-                
                 tag_class = "tag-red-glow" if "卡單" in status_raw else "tag-red-dim"
                 wait_time = parse_wait_time(o.get('排隊時間', ''))
-                
-                cards_html += f"""
-                <div class='mini-item-card'>
-                    <div class='mini-card-header'>
-                        <span class='okx-tag {tag_class}'>{short_status}</span>
-                        <span class='mini-card-amt'>${o.get('金額', o.get('金額 (USD)', 0)):,.0f}</span>
-                    </div>
-                    <div class='mini-stat-row'>
-                        <span class='okx-list-label'>報價</span>
-                        <span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{o.get('毛年化', '')}</span>
-                    </div>
-                    <div class='mini-stat-row'>
-                        <span class='okx-list-label'>等待</span>
-                        <span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span>
-                    </div>
-                </div>
-                """
+                amt = o.get('金額', o.get('金額 (USD)', 0))
+                rate_str = o.get('毛年化', '')
+                cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>等待</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -464,7 +435,8 @@ def lending_dashboard_fragment():
             for _, row in df.head(10).iterrows():
                 spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
                 tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''}</span></div></div>"
+                time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{time_str}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
