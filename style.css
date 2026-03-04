@@ -1,9 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 1. 基礎重置與防白邊 */
-:root { color-scheme: dark; background-color: #000000 !important; }
-html, body, #root, .stApp, [data-testid="stAppViewContainer"], .main { 
-    background-color: #000000 !important; 
+/* 1. 基礎重置 (已移除強制全黑防白邊的設定) */
+html, body, [data-testid="stAppViewContainer"], .main { 
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
     overscroll-behavior: none !important; 
     -webkit-text-size-adjust: 100%; 
@@ -34,7 +32,7 @@ div[data-testid="stHorizontalBlock"]:first-of-type {
     justify-content: space-between !important;
     width: 100% !important;
     max-width: 100% !important;
-    gap: 0 !important; /* 🌟 殺死導致切邊的元凶 */
+    gap: 0 !important; 
     margin: 0 0 20px 0 !important;
     padding: 0 !important;
 }
@@ -48,7 +46,7 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
     min-width: 0 !important;
 }
 div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(2) {
-    flex: 0 0 max-content !important; /* 🌟 強制按鈕收縮到最小，絕不撐破畫面 */
+    flex: 0 0 max-content !important; 
     width: auto !important;
     min-width: 0 !important;
 }
@@ -102,10 +100,12 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 12px; margin-bottom: 8px; }
 .okx-card-amt { font-size: 1.2rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
-/* 標籤 */
+/* 標籤 (清理了沒用到的滯銷標籤) */
 .okx-tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-.tag-green { color: #000000; background: #b2ff22; } .tag-yellow { color: #000000; background: #fcd535; }
-.tag-red { color: #ffffff; background: #ff4d4f; } .tag-gray { color: #eaecef; background: #2b3139; }
+.tag-green { color: #000000; background: #b2ff22; } 
+.tag-yellow { color: #000000; background: #fcd535; }
+.tag-red { color: #ffffff; background: #ff4d4f; } 
+.tag-gray { color: #eaecef; background: #2b3139; }
 
 /* 底部導航列 */
 div[data-testid="stTabs"] > div[role="tablist"] { position: fixed; bottom: 0; left: 0; width: 100vw; background-color: rgba(12, 14, 18, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 99999; border-top: 1px solid #1a1d24; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); display: flex; justify-content: space-around; box-sizing: border-box; }
@@ -113,7 +113,7 @@ div[data-testid="stTabs"] > div[role="tablist"] > button { flex: 1; display: fle
 div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
 div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
 
-/* 特效與提示氣泡 (修復版) */
+/* 特效與提示氣泡 */
 @keyframes neon-pulse { 0% { text-shadow: 0 0 0px rgba(178,255,34,0); } 50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;} 100% { text-shadow: 0 0 0px rgba(178,255,34,0); } }
 .pulse-text { animation: neon-pulse 1.5s infinite; }
 
@@ -129,7 +129,7 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     display: inline-flex; align-items: center; justify-content: center;
 }
 
-/* Tooltip 文字方塊的生成與顯示邏輯 */
+/* Tooltip 文字方塊 */
 .okx-tooltip::after {
     content: attr(data-tip);
     position: absolute;
@@ -214,22 +214,9 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
     margin-bottom: 0;
 }
 
-/* ================= 新增：特殊高亮標籤顏色 ================= */
+/* ================= 特殊高亮標籤顏色 ================= */
 .tag-green-glow { 
     color: #000000; 
     background: #b2ff22; 
     box-shadow: 0 0 8px rgba(178, 255, 34, 0.4);
-}
-
-.tag-red-glow { 
-    color: #ffffff; 
-    background: #ff4d4f; 
-    box-shadow: 0 0 8px rgba(255, 77, 79, 0.5);
-    font-weight: 700;
-}
-
-.tag-red-dim { 
-    color: #ffb3b3; 
-    background: rgba(255, 77, 79, 0.15); 
-    border: 1px solid rgba(255, 77, 79, 0.3);
 }
