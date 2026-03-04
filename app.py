@@ -346,7 +346,7 @@ def lending_dashboard_fragment():
             for l in loans_data:
                 amt = l.get('金額', l.get('金額 (USD)', 0))
                 rate = l.get('年化 (%)', 0)
-                exp = l.get('到期時間', '')[5:]
+                exp = l.get('到期時間', '')
                 cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>活躍</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>到期</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
