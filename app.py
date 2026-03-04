@@ -324,14 +324,20 @@ def lending_dashboard_fragment():
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
 
-        o_stat = data.get('stats', {}).get('overall', {})
+        true_apy = data.get('true_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
-        if o_stat.get("is_empty"): 
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a;'>數據收集載入中...</div>", unsafe_allow_html=True)
-        else:
-            wait_str = format_time_smart(o_stat.get('wait', 0) * 3600)
-            surv_str = format_time_smart(o_stat.get('survive', 0) * 3600)
-            st.markdown(f"""<div class='okx-panel' style='padding: 16px;'><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="精準扣除所有閒置成本與手續費後的真實獲利能力">真實等效年化 (True APY) <i>i</i></div><div class='okx-list-value text-green okx-value-mono' style='font-size:1.2rem;'>{o_stat.get('true_apy', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label'>平均毛年化</div><div class='okx-list-value okx-value-mono'>{o_stat.get('gross_rate', 0):.2f}%</div></div><div class='okx-list-item border-bottom'><div class='okx-list-label okx-tooltip' data-tip="資金從回到錢包到下次成功借出的平均等待時間">平均撮合耗時 <i>i</i></div><div class='okx-list-value'>{wait_str}</div></div><div class='okx-list-item'><div class='okx-list-label okx-tooltip' data-tip="合約成功放貸並持續計息的平均壽命">平均存活時間 <i>i</i></div><div class='okx-list-value'>{surv_str}</div></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='okx-panel' style='padding: 16px;'>
+            <div class='okx-list-item border-bottom'>
+                <div class='okx-list-label okx-tooltip' data-tip="精準計算資金利用率折算後的真實年化">真實等效年化 (True APY) <i>i</i></div>
+                <div class='okx-list-value text-green okx-value-mono' style='font-size:1.2rem;'>{true_apy:.2f}%</div>
+            </div>
+            <div class='okx-list-item'>
+                <div class='okx-list-label okx-tooltip' data-tip="當前成功放貸部位的平均毛利率">目前活躍毛年化</div>
+                <div class='okx-list-value okx-value-mono'>{active_apr:.2f}%</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     with tab_loans:
         loans_data = data.get('loans', [])
@@ -357,14 +363,13 @@ def lending_dashboard_fragment():
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無排隊中掛單</div>", unsafe_allow_html=True)
         else:
             total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
-            stuck_count = data.get('stuck_offers_count', 0)
-            st.markdown(f"""<div class="stats-3-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="等待時間超過系統容忍上限，建議手動降價">匹配滯緩 <i>i</i></div><div class="{'text-red' if stuck_count > 0 else 'text-green'} okx-value-mono" style="font-size:1.2rem;">{stuck_count} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">總排隊金額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">排隊掛單數</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
 
             cards_html = "<div class='mini-card-grid'>"
             for o in offers_data:
                 status_raw = o.get('狀態', '')
-                short_status = "滯緩" if "卡單" in status_raw else ("展期" if "換倉" in status_raw else "撮合")
-                tag_class = "tag-red-glow" if "卡單" in status_raw else "tag-red-dim"
+                short_status = "展期" if "換倉" in status_raw else "排隊"
+                tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
                 wait_time = parse_wait_time(o.get('排隊時間', ''))
                 amt = o.get('金額', o.get('金額 (USD)', 0))
                 rate_str = o.get('毛年化', '')
