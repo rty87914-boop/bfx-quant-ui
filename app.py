@@ -284,7 +284,8 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers, tab_analytics = st.tabs(["總覽", "借出", "掛單", "分析"])
+    # 🌟 新增「已配對」分頁標籤
+    tab_main, tab_loans, tab_offers, tab_matched, tab_analytics = st.tabs(["總覽", "借出", "掛單", "已配對", "分析"])
 
     with tab_main:
         if equity_history:
@@ -308,21 +309,6 @@ def lending_dashboard_fragment():
         else:
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
-
-        account_apy = data.get('hist_apy', 0)
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
-        etf_data = [{"name": "帳戶年化", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
-        max_rate = max([item["rate"] for item in etf_data])
-
-        grid_html = "<div class='etf-grid'>"
-        for item in etf_data:
-            is_winner = (item["rate"] == max_rate)
-            card_class = "etf-card etf-card-active" if is_winner else "etf-card"
-            sub_txt = "策略基準" if item.get("is_base") else (f"+{account_apy - item['rate']:.2f}%" if account_apy >= item['rate'] else f"{account_apy - item['rate']:.2f}%")
-            sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if account_apy >= item['rate'] else "color:#ff4d4f;")
-            grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.75rem; margin-top:6px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
-        grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
 
         true_apy = data.get('true_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合績效指標</div>", unsafe_allow_html=True)
@@ -376,6 +362,38 @@ def lending_dashboard_fragment():
                 cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>等待</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
+
+    # 🌟 新增「已配對」視覺呈現邏輯
+    with tab_matched:
+        matched_data = data.get('matched_trades', [])
+        if not matched_data:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無配對紀錄，等待背景擷取中...</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>最近配對明細</div>", unsafe_allow_html=True)
+            html_table = """
+            <div class='okx-panel' style='padding: 0; overflow: hidden;'>
+                <table style='width: 100%; text-align: left; border-collapse: collapse; font-size: 0.95rem;'>
+                    <thead>
+                        <tr style='border-bottom: 1px solid #2b3139; background-color: #0c0e12; color: #7a808a;'>
+                            <th style='padding: 16px; font-weight: 500;'>時間</th>
+                            <th style='padding: 16px; font-weight: 500;'>日利率 (%)</th>
+                            <th style='padding: 16px; font-weight: 500;'>期間</th>
+                            <th style='padding: 16px; text-align: right; font-weight: 500;'>數量</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            for m in matched_data:
+                html_table += f"""
+                        <tr style='border-bottom: 1px solid #1a1d24;'>
+                            <td style='padding: 16px; color: #848e9c; font-family: "JetBrains Mono", monospace;'>{m.get('時間', '')}</td>
+                            <td style='padding: 16px;' class='text-green okx-value-mono'>{m.get('利率', '')}</td>
+                            <td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{m.get('期間', '')}</td>
+                            <td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{m.get('數量', 0):,.0f}</td>
+                        </tr>
+                """
+            html_table += "</tbody></table></div>"
+            st.markdown(html_table, unsafe_allow_html=True)
 
     with tab_analytics:
         is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
