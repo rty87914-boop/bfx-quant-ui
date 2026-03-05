@@ -309,7 +309,6 @@ def lending_dashboard_fragment():
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度收益報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>累積數據中...</div>", unsafe_allow_html=True)
 
-        # 🌟 補回：ETF 標竿對比區塊
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>標竿對比</div>", unsafe_allow_html=True)
         etf_data = [{"name": "帳戶年化", "rate": account_apy, "is_base": True}, {"name": "0056", "rate": 7.50}, {"name": "00878", "rate": 7.00}, {"name": "00713", "rate": 8.00}]
@@ -405,10 +404,35 @@ def lending_dashboard_fragment():
         ai_insight_text = data.get("ai_insight_stored", "影子大腦初始化中...")
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:16px; border-color: #b2ff22; background: rgba(178,255,34,0.05);">
-            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子大腦即時預測</div>
+            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子軍師即時預測</div>
             <div style="color: #b2ff22; font-size: 0.95rem; font-weight:600; font-family:'JetBrains Mono', monospace; line-height: 1.5;">{ai_insight_text}</div>
         </div>
         """, unsafe_allow_html=True)
+
+        # 🌟 新增：影子驗算 (vs Fuly) 戰情區塊
+        shadow_active = data.get("shadow_active", False)
+        stuck_amt = data.get("stuck_amount", 0.0)
+        missed_hr = data.get("missed_hourly", 0.0)
+        rec_rate_val = data.get("rec_rate", 0.0)
+
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>影子驗算 (vs Fuly)</div>", unsafe_allow_html=True)
+        if shadow_active and stuck_amt > 0:
+            st.markdown(f"""
+            <div class="okx-panel" style="padding:16px; border-color: #ff4d4f; background: rgba(255,77,79,0.05);">
+                <div style="color: #ff4d4f; font-weight: 600; margin-bottom: 12px;">⚠️ 偵測到 Fuly 卡單造成無謂損失</div>
+                <div class="stats-3-col" style="margin-bottom:0;">
+                    <div><div class="okx-label">Fuly 閒置資金</div><div class="okx-value-mono" style="color:#fff; font-size:1.1rem;">${stuck_amt:,.0f}</div></div>
+                    <div><div class="okx-label">建議出擊利率</div><div class="text-green okx-value-mono" style="font-size:1.1rem;">{rec_rate_val:.2f}%</div></div>
+                    <div><div class="okx-label">每小時流失淨利</div><div class="text-red okx-value-mono" style="font-size:1.1rem;">-${missed_hr:.3f}</div></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="okx-panel" style="padding:16px; border-color: #3b4048;">
+                <div style="color: #848e9c; font-weight: 500; font-size: 0.9rem;">✅ 目前無明顯截胡套利空間，繼續陪伴 Fuly 等待高利。</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
             with st.spinner("Groq 正在極速解析大盤數據..."):
@@ -446,17 +470,18 @@ def lending_dashboard_fragment():
             df = pd.DataFrame(decisions)
             df['時間'] = pd.to_datetime(df.get('created_at', pd.Series(range(len(df))))).dt.tz_convert('Asia/Taipei') if 'created_at' in df.columns else pd.Series(range(len(df)))
 
+            # 🌟 更新：側錄筆數現在代表「AI成功學習的真實成交總數」
             total_logged = data.get('logged_decisions_count', len(df))
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本</div>", unsafe_allow_html=True)
-            st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="累積側錄的市場與報價決策總數">目前側錄筆數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本 (真實成交反饋)</div>", unsafe_allow_html=True)
+            st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="AI 成功分析對手真實成交利率的累積筆數">已學習成交總數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
             
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>側錄操作日誌</div>", unsafe_allow_html=True)
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>對手(Fuly) 預測誤差日誌</div>", unsafe_allow_html=True)
             cards_html = "<div class='okx-card-grid'>"
             for _, row in df.head(10).iterrows():
                 spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
                 tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
                 time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{time_str}</span></div></div>"
+                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預測報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{time_str}</span></div></div>"
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
