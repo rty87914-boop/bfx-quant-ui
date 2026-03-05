@@ -362,7 +362,7 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 🌟 修正「已配對」縮排顯示問題，確保渲染為 HTML 而不是 Code Block
+    # 🌟 表格標題已更換為「年利率 (%)」
     with tab_matched:
         matched_data = data.get('matched_trades', [])
         if not matched_data:
@@ -370,7 +370,7 @@ def lending_dashboard_fragment():
         else:
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>最近配對明細</div>", unsafe_allow_html=True)
             
-            html_table = "<div class='okx-panel' style='padding: 0; overflow: hidden;'><table style='width: 100%; text-align: left; border-collapse: collapse; font-size: 0.95rem;'><thead><tr style='border-bottom: 1px solid #2b3139; background-color: #0c0e12; color: #7a808a;'><th style='padding: 16px; font-weight: 500;'>時間</th><th style='padding: 16px; font-weight: 500;'>日利率 (%)</th><th style='padding: 16px; font-weight: 500;'>期間</th><th style='padding: 16px; text-align: right; font-weight: 500;'>數量</th></tr></thead><tbody>"
+            html_table = "<div class='okx-panel' style='padding: 0; overflow: hidden;'><table style='width: 100%; text-align: left; border-collapse: collapse; font-size: 0.95rem;'><thead><tr style='border-bottom: 1px solid #2b3139; background-color: #0c0e12; color: #7a808a;'><th style='padding: 16px; font-weight: 500;'>時間</th><th style='padding: 16px; font-weight: 500;'>年利率 (%)</th><th style='padding: 16px; font-weight: 500;'>期間</th><th style='padding: 16px; text-align: right; font-weight: 500;'>數量</th></tr></thead><tbody>"
             for m in matched_data:
                 html_table += f"<tr style='border-bottom: 1px solid #1a1d24;'><td style='padding: 16px; color: #848e9c; font-family: \"JetBrains Mono\", monospace;'>{m.get('時間', '')}</td><td style='padding: 16px;' class='text-green okx-value-mono'>{m.get('利率', '')}</td><td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{m.get('期間', '')}</td><td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{m.get('數量', 0):,.0f}</td></tr>"
             html_table += "</tbody></table></div>"
