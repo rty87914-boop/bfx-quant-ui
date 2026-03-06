@@ -14,11 +14,9 @@ logger = logging.getLogger(__name__)
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
 if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
-if 'ai_insight_result' not in st.session_state: st.session_state.ai_insight_result = None
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
 # ================= 2. 視覺風格定義 =================
@@ -83,15 +81,6 @@ async def update_user_settings(db_id: int, new_settings: dict):
         except Exception: pass
     return False
 
-async def fetch_bot_decisions(session) -> list:
-    if not SUPABASE_URL: return []
-    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-    try:
-        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,market_twap,bot_amount,bot_period&order=created_at.desc&limit=100", headers=headers, timeout=5) as res:
-            if res.status == 200: return await res.json()
-    except Exception: pass
-    return []
-
 async def fetch_equity_history(session) -> list:
     if not SUPABASE_URL: return []
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -103,7 +92,7 @@ async def fetch_equity_history(session) -> list:
 
 async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
-        return await asyncio.gather(fetch_cached_data(session, 1), fetch_bot_decisions(session), fetch_equity_history(session))
+        return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session))
 
 async def fetch_all_data_staking():
     async with aiohttp.ClientSession() as session:
@@ -136,7 +125,7 @@ def get_taiwan_time(utc_iso_str):
     except:
         return str(utc_iso_str).replace("T", " ")[:19]
 
-# ================= 4. 動態登入介面 (支援捷徑免密碼) =================
+# ================= 4. 動態登入介面 =================
 if not SUPABASE_URL:
     st.error("系統配置錯誤：缺少 SUPABASE_URL")
     st.stop()
@@ -236,10 +225,10 @@ with c_btn:
             st.query_params.clear()
             st.rerun()
 
-# ----------------- 模組 A：量解放貸面板 (Ming Yu) -----------------
+# ----------------- 模組 A：量解放貸面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
-    data, decisions, equity_history = asyncio.run(fetch_all_data_lending())
+    data, equity_history = asyncio.run(fetch_all_data_lending())
     if not data: return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
@@ -284,7 +273,7 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers, tab_matched, tab_analytics = st.tabs(["總覽", "借出", "掛單", "已配對", "分析"])
+    tab_main, tab_loans, tab_offers, tab_matched, tab_spy = st.tabs(["總覽", "借出", "掛單", "已配對", "🕵️‍♂️ 破解 Fuly"])
 
     with tab_main:
         if equity_history:
@@ -380,7 +369,7 @@ def lending_dashboard_fragment():
     with tab_matched:
         matched_data = data.get('matched_trades', [])
         if not matched_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無配驚紀錄，等待背景擷取中...</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無配對紀錄，等待背景擷取中...</div>", unsafe_allow_html=True)
         else:
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>最近配對明細</div>", unsafe_allow_html=True)
             
@@ -388,103 +377,68 @@ def lending_dashboard_fragment():
             for m in matched_data:
                 html_table += f"<tr style='border-bottom: 1px solid #1a1d24;'><td style='padding: 16px; color: #848e9c; font-family: \"JetBrains Mono\", monospace;'>{m.get('時間', '')}</td><td style='padding: 16px;' class='text-green okx-value-mono'>{m.get('利率', '')}</td><td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{m.get('期間', '')}</td><td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{m.get('數量', 0):,.0f}</td></tr>"
             html_table += "</tbody></table></div>"
-            
             st.markdown(html_table, unsafe_allow_html=True)
 
-    with tab_analytics:
-        is_spoofed = (data.get('market_frr', 0) - data.get('market_twap', 0)) > 3.0
-        spoof_class = "text-red" if is_spoofed else "text-green"
-        spoof_text = "溢價過高" if is_spoofed else "結構健康"
+    with tab_spy:
+        # 🕵️‍♂️ Spy Mode: 完全透明解析 Fuly 邏輯
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤基準 (Fuly 的參考系)</div>", unsafe_allow_html=True)
         
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
-        # 🌟 此處的 VWAP Tooltip 已更新為 200萬美金
-        st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率 (fUSD)">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價 (fUSD)">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 200 萬美金的均價 (fUSD)">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
+        m_twap = data.get('market_twap', 0)
+        m_vwap = data.get('market_vwap', 0)
         
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
+        st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="真實歷史成交">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#0ea5e9;">{m_twap:.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 200 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#fcd535;">{m_vwap:.2f}%</div></div></div>""", unsafe_allow_html=True)
         
-        ai_insight_text = data.get("ai_insight_stored", "影子大腦初始化中...")
-        st.markdown(f"""
-        <div class="okx-panel" style="padding:16px; margin-bottom:16px; border-color: #b2ff22; background: rgba(178,255,34,0.05);">
-            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子軍師即時預測 (fUSD 基準)</div>
-            <div style="color: #b2ff22; font-size: 0.95rem; font-weight:600; font-family:'JetBrains Mono', monospace; line-height: 1.5;">{ai_insight_text}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        shadow_active = data.get("shadow_active", False)
-        stuck_amt = data.get("stuck_amount", 0.0)
-        missed_hr = data.get("missed_hourly", 0.0)
-        rec_rate_val = data.get("rec_rate", 0.0)
-
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>影子驗算 (vs Fuly)</div>", unsafe_allow_html=True)
-        if shadow_active and stuck_amt > 0:
-            st.markdown(f"""
-            <div class="okx-panel" style="padding:16px; border-color: #ff4d4f; background: rgba(255,77,79,0.05);">
-                <div style="color: #ff4d4f; font-weight: 600; margin-bottom: 12px;">⚠️ 偵測到 Fuly 卡單造成無謂損失</div>
-                <div class="stats-3-col" style="margin-bottom:0;">
-                    <div><div class="okx-label">Fuly 閒置資金</div><div class="okx-value-mono" style="color:#fff; font-size:1.1rem;">${stuck_amt:,.0f}</div></div>
-                    <div><div class="okx-label">建議出擊利率</div><div class="text-green okx-value-mono" style="font-size:1.1rem;">{rec_rate_val:.2f}%</div></div>
-                    <div><div class="okx-label">每小時流失淨利</div><div class="text-red okx-value-mono" style="font-size:1.1rem;">-${missed_hr:.3f}</div></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>🕵️‍♂️ Fuly 陣地解析儀 (即時計算)</div>", unsafe_allow_html=True)
+        
+        offers_data = data.get('offers', [])
+        fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
+        
+        if not fUSD_offers:
+             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前 Fuly 沒有排隊中的 fUSD 訂單可以分析。</div>", unsafe_allow_html=True)
         else:
-            st.markdown(f"""
-            <div class="okx-panel" style="padding:16px; border-color: #3b4048;">
-                <div style="color: #848e9c; font-weight: 500; font-size: 0.9rem;">✅ 目前無明顯截胡套利空間，繼續陪伴 Fuly 等待高利。</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        if st.button("執行最新 AI 診斷 (Groq)", use_container_width=True):
-            with st.spinner("Groq 正在極速解析大盤數據..."):
-                if not GROQ_API_KEY:
-                    st.session_state.ai_insight_result = "⚠️ 尚未設定 GROQ_API_KEY。請至 Streamlit Cloud > Settings > Secrets 貼上金鑰。"
-                else:
-                    try:
-                        import groq
-                        client = groq.Groq(api_key=GROQ_API_KEY)
-                        prompt = f"""
-                        你是一位專業的量化放貸分析師。請根據以下最新市場數據給出 50 字以內的精簡策略建議：
-                        - 當前表面 FRR: {data.get('market_frr', 0)}%
-                        - 真實成交均價 TWAP: {data.get('market_twap', 0)}%
-                        - 資金閒置率: {data.get('idle_pct', 0)}%
-                        - 目前我的加權淨年化: {data.get('active_apr', 0)}%
-                        """
-                        response = client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[
-                                {"role": "system", "content": "你是一個冷靜、專業的交易員大腦，請勿使用 Emoji。"},
-                                {"role": "user", "content": prompt}
-                            ],
-                            max_tokens=150
-                        )
-                        st.session_state.ai_insight_result = response.choices[0].message.content.strip()
-                    except Exception as e:
-                        st.session_state.ai_insight_result = f"Groq API 呼叫失敗: {str(e)}"
-
-        if st.session_state.ai_insight_result:
-            st.markdown(f"""<div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;"><div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">LLM 深度報告 (Powered by Groq)</div><div style="color: #848e9c; font-size: 0.9rem; line-height: 1.6; font-weight:400;">{st.session_state.ai_insight_result}</div></div>""", unsafe_allow_html=True)
-        
-        if not decisions:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本收集載入中...</div>", unsafe_allow_html=True)
-        else:
-            df = pd.DataFrame(decisions)
-            df['時間'] = pd.to_datetime(df.get('created_at', pd.Series(range(len(df))))).dt.tz_convert('Asia/Taipei') if 'created_at' in df.columns else pd.Series(range(len(df)))
-
-            total_logged = data.get('logged_decisions_count', len(df))
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本 (真實成交反饋)</div>", unsafe_allow_html=True)
-            st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="AI 成功分析對手真實成交利率的累積筆數">已學習成交總數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
-            
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:30px 0 12px 0;'>對手(Fuly) 預測誤差日誌</div>", unsafe_allow_html=True)
             cards_html = "<div class='okx-card-grid'>"
-            for _, row in df.head(10).iterrows():
-                spread_twap = row.get('bot_rate_yearly', 0) - row.get('market_twap', 0)
-                tag_class = "tag-green" if spread_twap >= 0 else "tag-gray"
-                time_str = row['時間'].strftime('%m/%d %H:%M') if isinstance(row['時間'], pd.Timestamp) else ''
-                cards_html += f"<div class='okx-item-card'><div class='okx-card-header'><span class='okx-tag {tag_class}'>Alpha {spread_twap:+.2f}%</span><span class='okx-card-amt'>${row.get('bot_amount', 0):,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>預測報價</span><span class='okx-list-value okx-value-mono text-green'>{row.get('bot_rate_yearly', 0):.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>TWAP</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{row.get('market_twap', 0):.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>時間</span><span class='okx-list-value' style='color:#848e9c; font-weight:400;'>{time_str}</span></div></div>"
+            for o in fUSD_offers:
+                raw_rate = o.get('raw_rate', 0)
+                amt = o.get('金額', 0)
+                spread_twap = o.get('spread_twap', 0)
+                spread_vwap = o.get('spread_vwap', 0)
+                
+                tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
+                tag_twap_sign = "+" if spread_twap >= 0 else ""
+                
+                cards_html += f"""
+                <div class='okx-item-card' style='border-color: #3b4048;'>
+                    <div class='okx-card-header'>
+                        <span class='okx-tag {tag_twap_class}'>高於大盤 {tag_twap_sign}{spread_twap:.2f}%</span>
+                        <span class='okx-card-amt'>${amt:,.0f}</span>
+                    </div>
+                    <div class='okx-list-item border-bottom'>
+                        <span class='okx-list-label'>Fuly 實際掛出</span>
+                        <span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span>
+                    </div>
+                    <div class='okx-list-item border-bottom'>
+                        <span class='okx-list-label'>VS. 真實 TWAP ({m_twap:.2f}%)</span>
+                        <span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span>
+                    </div>
+                    <div class='okx-list-item'>
+                        <span class='okx-list-label'>VS. 壓力 VWAP ({m_vwap:.2f}%)</span>
+                        <span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{"+" if spread_vwap >= 0 else ""}{spread_vwap:.2f}%</span>
+                    </div>
+                </div>
+                """
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div style="margin-top:16px; font-size:0.85rem; color:#848e9c; line-height:1.6;">
+            💡 <b>間諜分析指南：</b><br>
+            觀察上方的 <b>VS. 真實 TWAP</b> 數值。<br>
+            • 若這幾天數值大多是固定的（例如永遠是 +4.00%），代表 Fuly 是採用「TWAP 追蹤並固定加價」的笨邏輯。<br>
+            • 若 Fuly 掛出的利率無論大盤怎麼變，都死卡在同一個高點，代表您的方案限制了它，使其變成了「死守型網格」。
+            </div>
+            """, unsafe_allow_html=True)
 
-# ----------------- 模組 B：DOT 淨本金面板 (Friend) -----------------
+# ----------------- 模組 B：DOT 淨本金面板 (不變) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
     global user_data
