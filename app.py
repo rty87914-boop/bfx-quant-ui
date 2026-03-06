@@ -380,7 +380,7 @@ def lending_dashboard_fragment():
     with tab_matched:
         matched_data = data.get('matched_trades', [])
         if not matched_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無配對紀錄，等待背景擷取中...</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前無配驚紀錄，等待背景擷取中...</div>", unsafe_allow_html=True)
         else:
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>最近配對明細</div>", unsafe_allow_html=True)
             
@@ -397,19 +397,19 @@ def lending_dashboard_fragment():
         spoof_text = "溢價過高" if is_spoofed else "結構健康"
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤監控</div>", unsafe_allow_html=True)
-        st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 50 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
+        # 🌟 此處的 VWAP Tooltip 已更新為 200萬美金
+        st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label">市場結構</div><div class="okx-value {spoof_class}" style="font-size:1.1rem;">{spoof_text}</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="官方顯示的表面基準利率 (fUSD)">表面 FRR <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fff;">{data.get('market_frr', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="過去 3 小時真實成交加權均價 (fUSD)">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#0ea5e9;">{data.get('market_twap', 0):.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 200 萬美金的均價 (fUSD)">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.1rem; color:#fcd535;">{data.get('market_vwap', 0):.2f}%</div></div></div>""", unsafe_allow_html=True)
         
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>系統大腦診斷</div>", unsafe_allow_html=True)
         
         ai_insight_text = data.get("ai_insight_stored", "影子大腦初始化中...")
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:16px; border-color: #b2ff22; background: rgba(178,255,34,0.05);">
-            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子軍師即時預測</div>
+            <div style="color: #ffffff; font-weight: 600; font-size: 0.9rem; margin-bottom: 8px;">🤖 影子軍師即時預測 (fUSD 基準)</div>
             <div style="color: #b2ff22; font-size: 0.95rem; font-weight:600; font-family:'JetBrains Mono', monospace; line-height: 1.5;">{ai_insight_text}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # 🌟 新增：影子驗算 (vs Fuly) 戰情區塊
         shadow_active = data.get("shadow_active", False)
         stuck_amt = data.get("stuck_amount", 0.0)
         missed_hr = data.get("missed_hourly", 0.0)
@@ -470,7 +470,6 @@ def lending_dashboard_fragment():
             df = pd.DataFrame(decisions)
             df['時間'] = pd.to_datetime(df.get('created_at', pd.Series(range(len(df))))).dt.tz_convert('Asia/Taipei') if 'created_at' in df.columns else pd.Series(range(len(df)))
 
-            # 🌟 更新：側錄筆數現在代表「AI成功學習的真實成交總數」
             total_logged = data.get('logged_decisions_count', len(df))
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>機器人學習樣本 (真實成交反饋)</div>", unsafe_allow_html=True)
             st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 20px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="AI 成功分析對手真實成交利率的累積筆數">已學習成交總數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{total_logged} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
