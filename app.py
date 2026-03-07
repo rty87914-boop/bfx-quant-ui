@@ -90,7 +90,6 @@ async def fetch_equity_history(session) -> list:
     except Exception: pass
     return []
 
-# 🔥 新增：撈取 Fuly 歷史行為日誌
 async def fetch_bot_decisions(session) -> list:
     if not SUPABASE_URL: return []
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
@@ -102,7 +101,6 @@ async def fetch_bot_decisions(session) -> list:
 
 async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
-        # 同時抓取即時快取、權益歷史，以及 Fuly 的行為日誌
         return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session), fetch_bot_decisions(session))
 
 async def fetch_all_data_staking():
@@ -239,7 +237,6 @@ with c_btn:
 # ----------------- 模組 A：量解放貸面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
-    # 接收包含 bot_decisions (Fuly歷史行為) 的資料
     data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
     if not data: return
         
@@ -269,7 +266,6 @@ def lending_dashboard_fragment():
     """, unsafe_allow_html=True)
 
     next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
-    
     active_apr = data.get("active_apr", 0)
     market_twap = data.get("market_twap", 0)
     alpha_premium = active_apr - market_twap
@@ -285,7 +281,8 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers, tab_matched, tab_spy = st.tabs(["總覽", "借出", "掛單", "已配對", "🕵️‍♂️ 破解 Fuly"])
+    # 🔥 在標籤列新增了「🎯 狙擊雷達」
+    tab_main, tab_loans, tab_offers, tab_matched, tab_radar, tab_spy = st.tabs(["總覽", "借出", "掛單", "已配對", "🎯 狙擊雷達", "🕵️‍♂️ 破解 Fuly"])
 
     with tab_main:
         if equity_history:
@@ -391,14 +388,53 @@ def lending_dashboard_fragment():
             html_table += "</tbody></table></div>"
             st.markdown(html_table, unsafe_allow_html=True)
 
+    # 🔥 核心新增：狙擊雷達渲染邏輯
+    with tab_radar:
+        top_bids = data.get('top_bids', [])
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>🎯 市場最高需求 (借款人掛單)</div>", unsafe_allow_html=True)
+        
+        if not top_bids:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前訂單簿無借款需求數據，等待 Worker 同步中...</div>", unsafe_allow_html=True)
+        else:
+            st.info("💡 **手動截胡提示**：如果您看到標註「🚨 極品肥羊」(例如 >12% 且 120天) 的單子，代表此時市場上有大戶正等著借錢。您可以立即打開 Bitfinex APP，以**完全相同的天期**與**等於/略低的利率**手動掛單借出，系統會瞬間為您配對鎖定！")
+            
+            cards_html = "<div class='okx-card-grid'>"
+            for b in top_bids:
+                rate = b.get('rate', 0)
+                period = b.get('period', 0)
+                vol = b.get('vol', 0)
+                
+                # 自動判斷是不是肥羊 (大於 10% 且天期夠長)
+                is_fat_sheep = rate >= 10.0 and period >= 120
+                tag_class = "tag-red" if is_fat_sheep else ("tag-yellow" if rate >= 10.0 else "tag-gray")
+                tag_text = "🚨 極品肥羊" if is_fat_sheep else ("🔥 高利需求" if rate >= 10.0 else "一般需求")
+                border_color = "#ff4d4f" if is_fat_sheep else ("#fcd535" if rate >= 10.0 else "#3b4048")
+                
+                cards_html += f"""
+                <div class='okx-item-card' style='border-color: {border_color};'>
+                    <div class='okx-card-header'>
+                        <span class='okx-tag {tag_class}'>{tag_text}</span>
+                        <span class='okx-card-amt'>${vol:,.0f}</span>
+                    </div>
+                    <div class='okx-list-item border-bottom'>
+                        <span class='okx-list-label'>借款人出價 (年化)</span>
+                        <span class='okx-list-value okx-value-mono text-green' style='font-size:1.2rem;'>{rate:.2f}%</span>
+                    </div>
+                    <div class='okx-list-item'>
+                        <span class='okx-list-label'>要求綁定天期</span>
+                        <span class='okx-list-value okx-value-mono' style='color:#ffffff;'>{period} 天</span>
+                    </div>
+                </div>
+                """
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
+
     with tab_spy:
-        # 🔥 AI 歷史行為逆向工程 (Fuly 演算法拆解)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>🧠 AI 歷史行為逆向工程 (Fuly 演算法拆解)</div>", unsafe_allow_html=True)
         
         if not bot_decisions or len(bot_decisions) < 5:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本不足。請讓 Fuly 運行一段時間，系統將自動從歷史日誌中反推其演算法。</div>", unsafe_allow_html=True)
         else:
-            # Pandas 統計分析
             df_spy = pd.DataFrame(bot_decisions)
             df_spy['diff_frr'] = df_spy['bot_rate_yearly'] - df_spy['market_frr']
             df_spy['diff_twap'] = df_spy['bot_rate_yearly'] - df_spy['market_twap']
@@ -411,7 +447,6 @@ def lending_dashboard_fragment():
             mean_diff_frr = df_spy['diff_frr'].mean()
             mean_diff_twap = df_spy['diff_twap'].mean()
             
-            # 演算法邏輯判定樹
             if pd.isna(std_rate):
                 logic_name = "樣本不足"
                 logic_desc = "需要累積更多 Fuly 掛單紀錄才能分析。"
@@ -448,7 +483,6 @@ def lending_dashboard_fragment():
             
         st.markdown("<hr style='border-color: #2b3139; margin: 24px 0;'>", unsafe_allow_html=True)
 
-        # 即時狀態追蹤 (不變)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤基準 (Fuly 當前參考系)</div>", unsafe_allow_html=True)
         m_twap = data.get('market_twap', 0)
         m_vwap = data.get('market_vwap', 0)
@@ -478,7 +512,7 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-# ----------------- 模組 B：DOT 淨本金面板 (不變) -----------------
+# ----------------- 模組 B：DOT 淨本金面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
     global user_data
