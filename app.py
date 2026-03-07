@@ -605,3 +605,4 @@ if user_info["role"] == "lending":
     lending_dashboard_fragment()
 elif user_info["role"] == "staking":
     staking_dashboard_fragment()
+    
