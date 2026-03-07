@@ -130,9 +130,9 @@ def get_taiwan_time(utc_iso_str):
         dt = pd.to_datetime(utc_iso_str)
         if dt.tz is None: dt = dt.tz_localize('UTC')
         tw_dt = dt.tz_convert('Asia/Taipei')
-        return tw_dt.strftime('%m/%d %H:%M:%S')
+        return tw_dt.strftime('%m/%d %H:%M')
     except:
-        return str(utc_iso_str).replace("T", " ")[:19]
+        return str(utc_iso_str).replace("T", " ")[:16]
 
 # ================= 4. 動態登入介面 =================
 if not SUPABASE_URL:
@@ -188,11 +188,11 @@ c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 with c_btn:
-    with st.popover("系統設定"):
-        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>介面設定</div>", unsafe_allow_html=True)
-        st.session_state.refresh_rate = st.selectbox("自動刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
+    with st.popover("設定"):
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統參數</div>", unsafe_allow_html=True)
+        st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        st.info("系統提示：目前網址已包含安全驗證參數，建議將本頁面加入書籤，以利後續免密碼登入。")
+        st.info("提示：目前網址已包含驗證參數，建議加入書籤以利免密碼登入。")
         
         if user_info["role"] == "staking":
             st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
@@ -204,13 +204,13 @@ with c_btn:
             new_secret = st.text_input("API Secret", value=saved_settings.get('api_secret', ''), type="password")
             
             if st.button("寫入設定", use_container_width=True, type="primary"):
-                with st.spinner("同步至資料庫中..."):
+                with st.spinner("同步至資料庫..."):
                     asyncio.run(update_user_settings(user_info["db_id"], {
                         "apy": new_apy,
                         "api_key": new_key.strip(),
                         "api_secret": new_secret.strip()
                     }))
-                st.success("參數已更新，將於下次回圈生效。")
+                st.success("參數已更新，下次回圈生效。")
                 st.rerun()
 
         st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
@@ -241,10 +241,11 @@ def lending_dashboard_fragment():
     if not data: return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
-    tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
+    tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
     
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     
+    # === 頂部資產總覽 (常駐) ===
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -281,7 +282,8 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_main, tab_loans, tab_offers, tab_matched, tab_radar, tab_spy = st.tabs(["總覽", "活躍部位", "排隊中", "歷史配對", "市場深度分析", "模型逆向工程"])
+    # === 主導航架構 (限制 4 個 Tab) ===
+    tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["總覽", "部位管理", "市場深度", "決策模型"])
 
     with tab_main:
         if equity_history:
@@ -336,74 +338,87 @@ def lending_dashboard_fragment():
         </div>
         """, unsafe_allow_html=True)
 
-    with tab_loans:
-        loans_data = data.get('loans', [])
-        if not loans_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
-        else:
-            total_loan_amt = sum(l.get('金額', l.get('金額 (USD)', 0)) for l in loans_data)
-            total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
-            st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
-            
-            cards_html = "<div class='mini-card-grid'>"
-            for l in loans_data:
-                amt = l.get('金額', l.get('金額 (USD)', 0))
-                rate = l.get('年化 (%)', 0)
-                exp = l.get('到期時間', '')
-                cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>執行中</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>結算</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
-            cards_html += "</div>"
-            st.markdown(cards_html, unsafe_allow_html=True)
-
-    with tab_offers:
-        offers_data = data.get('offers', [])
-        if not offers_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
-        else:
-            total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
-            st.markdown(f"""<div class="stats-2-col" style="margin-top:10px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
-
-            cards_html = "<div class='mini-card-grid'>"
-            for o in offers_data:
-                status_raw = o.get('狀態', '')
-                short_status = "展期" if "換倉" in status_raw else "排隊"
-                tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
-                wait_time = parse_wait_time(o.get('排隊時間', ''))
-                amt = o.get('金額', o.get('金額 (USD)', 0))
-                rate_str = o.get('毛年化', '')
-                cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>遲滯</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
-            cards_html += "</div>"
-            st.markdown(cards_html, unsafe_allow_html=True)
-
-    with tab_matched:
-        matched_data = data.get('matched_trades', [])
-        if not matched_data:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>歷史配對紀錄</div>", unsafe_allow_html=True)
-            
-            html_table = "<div class='okx-panel' style='padding: 0; overflow: hidden;'><table style='width: 100%; text-align: left; border-collapse: collapse; font-size: 0.95rem;'><thead><tr style='border-bottom: 1px solid #2b3139; background-color: #0c0e12; color: #7a808a;'><th style='padding: 16px; font-weight: 500;'>時間</th><th style='padding: 16px; font-weight: 500;'>年化率 (%)</th><th style='padding: 16px; font-weight: 500;'>天期</th><th style='padding: 16px; text-align: right; font-weight: 500;'>規模</th></tr></thead><tbody>"
-            for m in matched_data:
-                # 修復時間無法顯示的問題：嘗試抓取多種常見時間欄位，並過濾轉換為台灣時間
-                raw_time = m.get('created_at', m.get('時間', m.get('time', m.get('match_time', '尚未同步'))))
-                display_time = get_taiwan_time(raw_time) if raw_time else ''
+    with tab_manage:
+        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
+        
+        if manage_view == "活躍部位":
+            loans_data = data.get('loans', [])
+            if not loans_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
+            else:
+                total_loan_amt = sum(l.get('金額', l.get('金額 (USD)', 0)) for l in loans_data)
+                total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
+                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
                 
-                # 兼容不同資料結構的欄位名稱
-                rate = m.get('利率', m.get('rate', ''))
-                period = m.get('期間', m.get('period', ''))
-                amount = m.get('數量', m.get('amount', 0))
+                cards_html = "<div class='mini-card-grid'>"
+                for l in loans_data:
+                    amt = l.get('金額', l.get('金額 (USD)', 0))
+                    rate = l.get('年化 (%)', 0)
+                    exp = l.get('到期時間', '')
+                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>執行中</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>結算</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
 
-                html_table += f"<tr style='border-bottom: 1px solid #1a1d24;'><td style='padding: 16px; color: #848e9c; font-family: \"JetBrains Mono\", monospace;'>{display_time}</td><td style='padding: 16px;' class='text-green okx-value-mono'>{rate}</td><td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{period}</td><td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{amount:,.0f}</td></tr>"
-            html_table += "</tbody></table></div>"
-            st.markdown(html_table, unsafe_allow_html=True)
+        elif manage_view == "排隊中":
+            offers_data = data.get('offers', [])
+            if not offers_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
+            else:
+                total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
+                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+
+                cards_html = "<div class='mini-card-grid'>"
+                for o in offers_data:
+                    status_raw = o.get('狀態', '')
+                    short_status = "展期" if "換倉" in status_raw else "排隊"
+                    tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
+                    wait_time = parse_wait_time(o.get('排隊時間', ''))
+                    amt = o.get('金額', o.get('金額 (USD)', 0))
+                    rate_str = o.get('毛年化', '')
+                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>遲滯</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
+
+        else:
+            # 歷史配對：雙層清單卡片視圖
+            matched_data = data.get('matched_trades', [])
+            if not matched_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
+            else:
+                cards_html = "<div class='list-view-container'>"
+                for m in matched_data:
+                    raw_time = m.get('created_at', m.get('時間', m.get('time', m.get('match_time', '尚未同步'))))
+                    display_time = get_taiwan_time(raw_time) if raw_time else '--/-- --:--'
+                    
+                    rate = str(m.get('利率', m.get('rate', '')))
+                    if "%" not in rate and rate.replace('.', '', 1).isdigit(): rate = f"{float(rate):.4f}%"
+                    
+                    period = m.get('期間', m.get('period', ''))
+                    amount = m.get('數量', m.get('amount', 0))
+
+                    cards_html += f"""
+                    <div class='list-view-item'>
+                        <div class='list-view-col-left'>
+                            <div class='list-view-subtext'>{display_time}</div>
+                            <div class='list-view-maintext text-green okx-value-mono'>{rate}</div>
+                        </div>
+                        <div class='list-view-col-right'>
+                            <div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div>
+                            <div class='list-view-subtext'>{period} 天</div>
+                        </div>
+                    </div>
+                    """
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_radar:
         top_bids = data.get('top_bids', [])
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>訂單簿深度分析 (買方需求)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>買方深度需求</div>", unsafe_allow_html=True)
         
         if not top_bids:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前訂單簿無顯著借款需求，等待資料同步...</div>", unsafe_allow_html=True)
         else:
-            st.info("系統提示：當標註「高溢價長單」(例如 >10% 且 120天) 出現時，表示市場存在機構級流動性需求。您可手動提交具備相同參數的放貸委託以獲取最佳執行價格。")
+            st.info("提示：當標註「高溢價長單」出現時，代表市場存在機構級流動性需求。可手動跟單獲取最佳執行價格。")
             
             cards_html = "<div class='okx-card-grid'>"
             for b in top_bids:
@@ -425,7 +440,7 @@ def lending_dashboard_fragment():
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>決策模型反向工程</div>", unsafe_allow_html=True)
         
         if not bot_decisions or len(bot_decisions) < 5:
-            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本量不足，系統正在持續採集特徵數據...</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>樣本量不足，系統持續採集特徵中...</div>", unsafe_allow_html=True)
         else:
             df_spy = pd.DataFrame(bot_decisions)
             df_spy['diff_frr'] = df_spy['bot_rate_yearly'] - df_spy['market_frr']
@@ -487,7 +502,7 @@ def lending_dashboard_fragment():
         fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
         
         if not fUSD_offers:
-             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前查無掛單樣本。</div>", unsafe_allow_html=True)
+             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>查無掛單樣本。</div>", unsafe_allow_html=True)
         else:
             cards_html = "<div class='okx-card-grid'>"
             for o in fUSD_offers:
@@ -499,7 +514,7 @@ def lending_dashboard_fragment():
                 tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
                 tag_twap_sign = "+" if spread_twap >= 0 else ""
                 
-                cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>對標 Alpha {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>策略執行費率</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Δ TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>Δ VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
+                cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>Alpha {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>策略執行費率</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Δ TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>Δ VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
                 
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
@@ -509,11 +524,11 @@ def lending_dashboard_fragment():
 def staking_dashboard_fragment():
     global user_data
     if not user_data: 
-        st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>請先至上方「系統設定」寫入 API 金鑰，系統將自動擷取特徵資料。</div>", unsafe_allow_html=True)
+        st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>請先至設定寫入 API 金鑰，以擷取特徵資料。</div>", unsafe_allow_html=True)
         return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
-    tw_short_time = tw_full_time.split(' ')[1][:5] if ' ' in tw_full_time else ""
+    tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
     
     settings = user_data.get("settings", {})
     user_apy = float(settings.get("apy", 15.0))
@@ -536,7 +551,7 @@ def staking_dashboard_fragment():
     daily_reward_twd = daily_reward_usd * usd_twd_fx
 
     if dot_balance == 0 and not settings.get('api_key'):
-        st.info("系統提示：寫入 API 金鑰以啟用 DOT 節點追蹤。")
+        st.info("提示：寫入 API 金鑰以啟用節點追蹤。")
         return
 
     st.markdown(f"""
@@ -559,7 +574,7 @@ def staking_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>質押績效與外匯匯率</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>質押績效與匯率</div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class="stats-2-col">
         <div class="status-card"><div class="okx-label">預期報酬率 (APY)</div><div class="okx-value-mono text-green" style="font-size:1.4rem;">{user_apy:.1f}%</div></div>
