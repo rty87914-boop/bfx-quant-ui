@@ -35,17 +35,14 @@ _ = st.components.v1.html("""<script>
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
     
-    // 🎯 新增：監聽 Tab 點擊事件，自動回到頂部
+    // 監聽 Tab 點擊事件，自動回到頂部 (放在上方導航也同樣適用)
     function setupTabAutoScroll() {
         const parentDoc = window.parent.document;
         parentDoc.addEventListener('click', function(e) {
             let target = e.target;
-            // 向上遍歷，確認點擊的是否為 Tab 按鈕
             while (target && target !== parentDoc) {
                 if (target.getAttribute && target.getAttribute('role') === 'tab') {
-                    // 稍微延遲以確保 Streamlit 完成 DOM 切換
                     setTimeout(() => {
-                        // 針對 Streamlit 不同的滾動容器進行置頂打擊
                         let scrollArea = parentDoc.querySelector('.main') || parentDoc.querySelector('[data-testid="stAppViewContainer"]') || parentDoc.documentElement;
                         if(scrollArea) {
                             scrollArea.scrollTo({top: 0, behavior: 'auto'});
@@ -269,7 +266,7 @@ def lending_dashboard_fragment():
     
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     
-    # === 頂部資產總覽 (常駐) ===
+    # === 頂部資產總覽 ===
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -335,7 +332,6 @@ def lending_dashboard_fragment():
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>績效基準對比 (Benchmark)</div>", unsafe_allow_html=True)
         
-        # 替換為實際的台美股高股息 ETF 對標並精簡名稱防跑版
         etf_data = [
             {"name": "系統回測年化", "rate": account_apy, "is_base": True}, 
             {"name": "0056 元大高股息", "rate": 7.50}, 
@@ -411,7 +407,6 @@ def lending_dashboard_fragment():
                 st.markdown(cards_html, unsafe_allow_html=True)
 
         else:
-            # 修復 HTML 外洩：拍平字串，消除 Markdown 引擎對多行縮排的誤判
             matched_data = data.get('matched_trades', [])
             if not matched_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
@@ -427,7 +422,6 @@ def lending_dashboard_fragment():
                     period = m.get('期間', m.get('period', ''))
                     amount = m.get('數量', m.get('amount', 0))
 
-                    # 使用單行串接避免被視為程式碼區塊
                     cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
                     
                 cards_html += "</div>"
@@ -541,8 +535,8 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 🎯 實體隱形墊片：暴力解決最底層被導航列擋住的問題
-    st.markdown("<div style='height: 150px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
+    # 實體隱形墊片：因為取消了底部固定導航，稍微縮減高度，留出舒服的滑動空間即可
+    st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
 # ----------------- 模組 B：DOT 淨本金面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
@@ -627,8 +621,7 @@ def staking_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    # 🎯 實體隱形墊片：暴力解決最底層被導航列擋住的問題
-    st.markdown("<div style='height: 150px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
 # 路由判斷
 if user_info["role"] == "lending":
