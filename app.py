@@ -90,9 +90,20 @@ async def fetch_equity_history(session) -> list:
     except Exception: pass
     return []
 
+# 🔥 新增：撈取 Fuly 歷史行為日誌
+async def fetch_bot_decisions(session) -> list:
+    if not SUPABASE_URL: return []
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,market_twap,bot_amount,bot_period&order=created_at.desc&limit=300", headers=headers, timeout=5) as res:
+            if res.status == 200: return await res.json()
+    except Exception: pass
+    return []
+
 async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
-        return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session))
+        # 同時抓取即時快取、權益歷史，以及 Fuly 的行為日誌
+        return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session), fetch_bot_decisions(session))
 
 async def fetch_all_data_staking():
     async with aiohttp.ClientSession() as session:
@@ -228,7 +239,8 @@ with c_btn:
 # ----------------- 模組 A：量解放貸面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
-    data, equity_history = asyncio.run(fetch_all_data_lending())
+    # 接收包含 bot_decisions (Fuly歷史行為) 的資料
+    data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
     if not data: return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
@@ -380,14 +392,70 @@ def lending_dashboard_fragment():
             st.markdown(html_table, unsafe_allow_html=True)
 
     with tab_spy:
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤基準 (Fuly 的參考系)</div>", unsafe_allow_html=True)
+        # 🔥 AI 歷史行為逆向工程 (Fuly 演算法拆解)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>🧠 AI 歷史行為逆向工程 (Fuly 演算法拆解)</div>", unsafe_allow_html=True)
         
+        if not bot_decisions or len(bot_decisions) < 5:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本不足。請讓 Fuly 運行一段時間，系統將自動從歷史日誌中反推其演算法。</div>", unsafe_allow_html=True)
+        else:
+            # Pandas 統計分析
+            df_spy = pd.DataFrame(bot_decisions)
+            df_spy['diff_frr'] = df_spy['bot_rate_yearly'] - df_spy['market_frr']
+            df_spy['diff_twap'] = df_spy['bot_rate_yearly'] - df_spy['market_twap']
+            
+            std_rate = df_spy['bot_rate_yearly'].std()
+            std_frr = df_spy['diff_frr'].std()
+            std_twap = df_spy['diff_twap'].std()
+            
+            mean_rate = df_spy['bot_rate_yearly'].mean()
+            mean_diff_frr = df_spy['diff_frr'].mean()
+            mean_diff_twap = df_spy['diff_twap'].mean()
+            
+            # 演算法邏輯判定樹
+            if pd.isna(std_rate):
+                logic_name = "樣本不足"
+                logic_desc = "需要累積更多 Fuly 掛單紀錄才能分析。"
+                box_color = "rgba(122, 128, 138, 0.1)"
+                border_color = "#3b4048"
+            elif std_rate < 0.2:
+                logic_name = "🔴 絕對死守型 (Fixed Rate limit)"
+                logic_desc = f"強烈警告：Fuly 完全無視大盤波動，將資金硬性釘死在約 <b>{mean_rate:.2f}%</b>。這通常是因為 Basic 方案的最低利率限制，導致資金嚴重閒置。"
+                box_color = "rgba(255, 77, 79, 0.05)"
+                border_color = "#ff4d4f"
+            elif std_frr < std_twap and std_frr < 1.0:
+                logic_name = "🟡 FRR 錨定型 (FRR Anchored)"
+                logic_desc = f"Fuly 採用了較遲鈍的定價法，盲目跟隨官方表面利率。推測底層公式：<b>FRR {'+' if mean_diff_frr>=0 else ''}{mean_diff_frr:.2f}%</b>"
+                box_color = "rgba(252, 213, 53, 0.05)"
+                border_color = "#fcd535"
+            elif std_twap < std_frr and std_twap < 1.0:
+                logic_name = "🟢 TWAP 追蹤型 (TWAP Tracker)"
+                logic_desc = f"Fuly 具備觀察真實市場的能力。推測底層公式：<b>真實 TWAP {'+' if mean_diff_twap>=0 else ''}{mean_diff_twap:.2f}%</b>"
+                box_color = "rgba(178, 255, 34, 0.05)"
+                border_color = "#b2ff22"
+            else:
+                logic_name = "🟣 階梯網格 / 未知動態 (Dynamic Grid)"
+                logic_desc = "Fuly 的掛單呈現無規律散佈。它可能使用了多層階梯網格，或是根據您的資金水位在不斷變換公式。"
+                box_color = "rgba(168, 85, 247, 0.05)"
+                border_color = "#a855f7"
+
+            st.markdown(f"""
+            <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: {border_color}; background: {box_color};">
+                <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 8px;">綜合分析結論：{logic_name}</div>
+                <div style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">{logic_desc}</div>
+                <div style="margin-top: 12px; font-size: 0.8rem; color: #7a808a;">* 此診斷基於資料庫中過去 {len(df_spy)} 筆 Fuly 實際下單行為所回測推演出來。</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown("<hr style='border-color: #2b3139; margin: 24px 0;'>", unsafe_allow_html=True)
+
+        # 即時狀態追蹤 (不變)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤基準 (Fuly 當前參考系)</div>", unsafe_allow_html=True)
         m_twap = data.get('market_twap', 0)
         m_vwap = data.get('market_vwap', 0)
         
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="真實歷史成交">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#0ea5e9;">{m_twap:.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 200 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#fcd535;">{m_vwap:.2f}%</div></div></div>""", unsafe_allow_html=True)
         
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>🕵️‍♂️ Fuly 陣地解析儀 (即時計算)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>🕵️‍♂️ Fuly 現況解析儀 (即時狀態)</div>", unsafe_allow_html=True)
         
         offers_data = data.get('offers', [])
         fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
@@ -405,20 +473,10 @@ def lending_dashboard_fragment():
                 tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
                 tag_twap_sign = "+" if spread_twap >= 0 else ""
                 
-                # 修復了這裡的縮排陷阱，全部壓成單行字串
                 cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>高於大盤 {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Fuly 實際掛出</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>VS. 真實 TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>VS. 壓力 VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
                 
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
-            
-            st.markdown("""
-            <div style="margin-top:16px; font-size:0.85rem; color:#848e9c; line-height:1.6;">
-            💡 <b>間諜分析指南：</b><br>
-            觀察上方的 <b>VS. 真實 TWAP</b> 數值。<br>
-            • 若這幾天數值大多是固定的（例如永遠是 +4.00%），代表 Fuly 是採用「TWAP 追蹤並固定加價」的笨邏輯。<br>
-            • 若 Fuly 掛出的利率無論大盤怎麼變，都死卡在同一個高點，代表您的方案限制了它，使其變成了「死守型網格」。
-            </div>
-            """, unsafe_allow_html=True)
 
 # ----------------- 模組 B：DOT 淨本金面板 (不變) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
