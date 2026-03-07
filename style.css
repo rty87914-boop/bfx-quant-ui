@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-/* 1. 基礎重置 (已移除強制全黑防白邊的設定) */
+/* 1. 基礎重置與 App 沉浸式隱藏元件 */
 html, body, [data-testid="stAppViewContainer"], .main { 
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
     overscroll-behavior: none !important; 
@@ -8,10 +8,19 @@ html, body, [data-testid="stAppViewContainer"], .main {
     -webkit-tap-highlight-color: transparent; 
 }
 
-/* 2. 隱藏干擾元件，確保左右安全邊界 */
+/* 徹底隱藏瀏覽器滾動條，營造 App 感 */
+::-webkit-scrollbar { display: none !important; }
+* { scrollbar-width: none !important; }
+
+/* 隱藏 Streamlit 原生干擾元件 (選單、部署按鈕、預設頁首/頁尾) */
 header[data-testid="stHeader"], footer, .stSpinner, .stMarkdown a { display: none !important; pointer-events: none; }
+#MainMenu { visibility: hidden !important; }
+.stAppDeployButton { display: none !important; }
+
+/* 2. 主容器安全邊界適配 (Safe Area) */
 .block-container { 
-    padding: 24px 16px 100px 16px !important; /* 左右保留 16px 安全距離 */
+    /* 結合瀏海與底部導航列的安全距離 */
+    padding: env(safe-area-inset-top) 16px calc(100px + env(safe-area-inset-bottom)) 16px !important; 
     max-width: 100vw !important; 
     overflow-x: hidden !important; 
     box-sizing: border-box !important; 
@@ -100,18 +109,49 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
 .okx-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1d24; padding-bottom: 12px; margin-bottom: 8px; }
 .okx-card-amt { font-size: 1.2rem; font-weight: 700; color: #ffffff; font-family: 'JetBrains Mono', monospace; }
 
-/* 標籤 (清理了沒用到的滯銷標籤) */
+/* 標籤 */
 .okx-tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .tag-green { color: #000000; background: #b2ff22; } 
 .tag-yellow { color: #000000; background: #fcd535; }
 .tag-red { color: #ffffff; background: #ff4d4f; } 
 .tag-gray { color: #eaecef; background: #2b3139; }
 
-/* 底部導航列 */
-div[data-testid="stTabs"] > div[role="tablist"] { position: fixed; bottom: 0; left: 0; width: 100vw; background-color: rgba(12, 14, 18, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 99999; border-top: 1px solid #1a1d24; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); display: flex; justify-content: space-around; box-sizing: border-box; }
-div[data-testid="stTabs"] > div[role="tablist"] > button { flex: 1; display: flex; justify-content: center; color: #7a808a !important; font-weight: 500; font-size: 0.9rem !important; padding: 8px 0; border: none !important; transition: transform 0.1s ease; }
-div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.92) !important; }
-div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #b2ff22 !important; font-weight: 700; }
+/* 底部導航列 (App原生化優化) */
+div[data-testid="stTabs"] > div[role="tablist"] { 
+    position: fixed; 
+    bottom: 0; 
+    left: 0; 
+    width: 100vw; 
+    background-color: rgba(12, 14, 18, 0.90); 
+    backdrop-filter: blur(20px); 
+    -webkit-backdrop-filter: blur(20px); 
+    z-index: 99999; 
+    border-top: 1px solid #1a1d24; 
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom)); 
+    display: flex; 
+    justify-content: space-around; 
+    box-sizing: border-box; 
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button { 
+    flex: 1; 
+    display: flex; 
+    justify-content: center; 
+    color: #7a808a !important; 
+    font-weight: 500; 
+    font-size: 0.9rem !important; 
+    padding: 8px 0; 
+    border: none !important; 
+    transition: all 0.2s ease; 
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button:active { 
+    transform: scale(0.85) !important; 
+    opacity: 0.7;
+}
+div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { 
+    color: #b2ff22 !important; 
+    font-weight: 700; 
+    text-shadow: 0 0 8px rgba(178, 255, 34, 0.3);
+}
 
 /* 特效與提示氣泡 */
 @keyframes neon-pulse { 0% { text-shadow: 0 0 0px rgba(178,255,34,0); } 50% { text-shadow: 0 0 15px rgba(178,255,34,0.5); color: #b2ff22;} 100% { text-shadow: 0 0 0px rgba(178,255,34,0); } }
