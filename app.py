@@ -19,7 +19,7 @@ if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-# ================= 2. 視覺風格定義 =================
+# ================= 2. 視覺風格定義與 JS 腳本注入 =================
 _ = st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -34,6 +34,30 @@ _ = st.components.v1.html("""<script>
     }
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
+    
+    // 🎯 新增：監聽 Tab 點擊事件，自動回到頂部
+    function setupTabAutoScroll() {
+        const parentDoc = window.parent.document;
+        parentDoc.addEventListener('click', function(e) {
+            let target = e.target;
+            // 向上遍歷，確認點擊的是否為 Tab 按鈕
+            while (target && target !== parentDoc) {
+                if (target.getAttribute && target.getAttribute('role') === 'tab') {
+                    // 稍微延遲以確保 Streamlit 完成 DOM 切換
+                    setTimeout(() => {
+                        // 針對 Streamlit 不同的滾動容器進行置頂打擊
+                        let scrollArea = parentDoc.querySelector('.main') || parentDoc.querySelector('[data-testid="stAppViewContainer"]') || parentDoc.documentElement;
+                        if(scrollArea) {
+                            scrollArea.scrollTo({top: 0, behavior: 'auto'});
+                        }
+                    }, 50);
+                    break;
+                }
+                target = target.parentNode;
+            }
+        });
+    }
+    try { setupTabAutoScroll(); } catch(e) {}
 </script>""", height=0, width=0)
 
 # ================= 3. 資料獲取與設定引擎 =================
@@ -517,6 +541,9 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
+    # 🎯 實體隱形墊片：暴力解決最底層被導航列擋住的問題
+    st.markdown("<div style='height: 150px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
+
 # ----------------- 模組 B：DOT 淨本金面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def staking_dashboard_fragment():
@@ -600,9 +627,11 @@ def staking_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
+    # 🎯 實體隱形墊片：暴力解決最底層被導航列擋住的問題
+    st.markdown("<div style='height: 150px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
+
 # 路由判斷
 if user_info["role"] == "lending":
     lending_dashboard_fragment()
 elif user_info["role"] == "staking":
     staking_dashboard_fragment()
-    
