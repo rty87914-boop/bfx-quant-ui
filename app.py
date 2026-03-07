@@ -281,8 +281,8 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    # 🔥 在標籤列新增了「🎯 狙擊雷達」
-    tab_main, tab_loans, tab_offers, tab_matched, tab_radar, tab_spy = st.tabs(["總覽", "借出", "掛單", "已配對", "🎯 狙擊雷達", "🕵️‍♂️ 破解 Fuly"])
+    # 🔥 在標籤列新增了「狙擊雷達」
+    tab_main, tab_loans, tab_offers, tab_matched, tab_radar, tab_spy = st.tabs(["總覽", "借出", "掛單", "已配對", "狙擊雷達", "破解 Fuly"])
 
     with tab_main:
         if equity_history:
@@ -430,7 +430,7 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_spy:
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>🧠 AI 歷史行為逆向工程 (Fuly 演算法拆解)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'> AI 歷史行為逆向工程 (Fuly 演算法拆解)</div>", unsafe_allow_html=True)
         
         if not bot_decisions or len(bot_decisions) < 5:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫樣本不足。請讓 Fuly 運行一段時間，系統將自動從歷史日誌中反推其演算法。</div>", unsafe_allow_html=True)
@@ -489,7 +489,7 @@ def lending_dashboard_fragment():
         
         st.markdown(f"""<div class="stats-2-col" style="margin-bottom: 24px;"><div class="status-card"><div class="okx-label okx-tooltip" data-tip="真實歷史成交">真實 TWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#0ea5e9;">{m_twap:.2f}%</div></div><div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前訂單簿吃下 200 萬美金的均價">壓力 VWAP <i>i</i></div><div class="okx-value okx-value-mono" style="font-size:1.2rem; color:#fcd535;">{m_vwap:.2f}%</div></div></div>""", unsafe_allow_html=True)
         
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>🕵️‍♂️ Fuly 現況解析儀 (即時狀態)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>Fuly 現況解析儀 (即時狀態)</div>", unsafe_allow_html=True)
         
         offers_data = data.get('offers', [])
         fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
