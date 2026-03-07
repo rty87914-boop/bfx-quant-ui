@@ -17,7 +17,7 @@ header[data-testid="stHeader"], footer, .stSpinner, .stMarkdown a { display: non
 #MainMenu { visibility: hidden !important; }
 .stAppDeployButton { display: none !important; }
 
-/* 2. 主容器安全邊界適配 (Safe Area) - 150px 終極防護墊片 */
+/* 2. 主容器安全邊界適配 (Safe Area) - 150px 終極防護墊片，避免被底部導航擋住 */
 .block-container { 
     padding: env(safe-area-inset-top) 16px calc(150px + env(safe-area-inset-bottom)) 16px !important; 
     max-width: 100vw !important; 
@@ -79,19 +79,48 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
 .tag-red { color: #ffffff; background: #ff4d4f; } 
 .tag-gray { color: #eaecef; background: #2b3139; }
 
-/* 底部導航列 (嚴格限制 4 選項，無滑動) */
-div[data-testid="stTabs"] > div[role="tablist"] { 
-    position: fixed; bottom: 0; left: 0; width: 100vw; background-color: rgba(12, 14, 18, 0.90); 
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 99999; 
-    border-top: 1px solid #1a1d24; padding: 12px 10px calc(12px + env(safe-area-inset-bottom)); 
-    display: flex; justify-content: space-around; box-sizing: border-box; overflow: hidden !important; 
+/* 🎯 底部導航列真·底部化 (強迫固定在畫面最底下) */
+div[data-testid="stTabs"] {
+    display: flex;
+    flex-direction: column;
 }
-div[data-testid="stTabs"] > div[role="tablist"] > button { 
-    flex: 1; display: flex; justify-content: center; color: #7a808a !important; font-weight: 500; 
-    font-size: 0.9rem !important; padding: 8px 0; border: none !important; transition: all 0.2s ease; 
+div[data-testid="stTabs"] > div:first-child { 
+    position: fixed !important; 
+    bottom: 0 !important; 
+    left: 0 !important; 
+    width: 100vw !important; 
+    background-color: rgba(12, 14, 18, 0.95) !important; 
+    backdrop-filter: blur(20px) !important; 
+    -webkit-backdrop-filter: blur(20px) !important; 
+    z-index: 99999 !important; 
+    border-top: 1px solid #1a1d24 !important; 
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom)) 10px !important; 
+    display: flex !important; 
+    justify-content: space-around !important; 
+    box-sizing: border-box !important; 
+    overflow: hidden !important; 
 }
-div[data-testid="stTabs"] > div[role="tablist"] > button:active { transform: scale(0.85) !important; opacity: 0.7; }
-div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] { color: #ffffff !important; font-weight: 700; text-shadow: 0 0 8px rgba(255, 255, 255, 0.2); }
+div[data-testid="stTabs"] > div:first-child button { 
+    flex: 1 !important; 
+    display: flex !important; 
+    justify-content: center !important; 
+    color: #7a808a !important; 
+    font-weight: 500 !important; 
+    font-size: 0.9rem !important; 
+    padding: 8px 0 !important; 
+    background: transparent !important;
+    border: none !important; 
+    transition: all 0.2s ease !important; 
+}
+div[data-testid="stTabs"] > div:first-child button:active { transform: scale(0.85) !important; opacity: 0.7 !important; }
+div[data-testid="stTabs"] > div:first-child button[aria-selected="true"] { 
+    color: #ffffff !important; 
+    font-weight: 700 !important; 
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.2) !important; 
+}
+div[data-testid="stTabs"] > div:first-child div[data-baseweb="tab-highlight"] {
+    display: none !important; /* 隱藏預設的指示線，讓外觀更簡潔 */
+}
 
 /* 歷史紀錄：雙層清單卡片視圖 (List View) */
 .list-view-container { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
@@ -115,9 +144,11 @@ div[data-testid="stTabs"] > div[role="tablist"] > button[aria-selected="true"] {
 .okx-tooltip:hover::after, .okx-tooltip:active::after { opacity: 1; visibility: visible; bottom: 150%; }
 
 .etf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
-.etf-card { background: #0c0e12; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #121418; transition: transform 0.1s ease; }
+.etf-card { background: #0c0e12; padding: 16px; border-radius: 12px; text-align: left; border: 1px solid #121418; transition: transform 0.1s ease; }
 .etf-card:active { transform: scale(0.96); }
 .etf-card-active { background: rgba(178, 255, 34, 0.03); border: 1px solid rgba(178, 255, 34, 0.2); }
+.etf-title { font-size: 0.8rem; color: #7a808a; margin-bottom: 6px; font-weight: 500; }
+.etf-rate { font-size: 1.25rem; font-weight: 700; color: #ffffff; }
 
 .mini-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
 .mini-item-card { background: #0c0e12; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; border: 1px solid #1a1d24; transition: transform 0.1s ease, border-color 0.2s ease; box-sizing: border-box; }
