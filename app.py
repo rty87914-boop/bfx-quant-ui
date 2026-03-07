@@ -184,7 +184,8 @@ else:
 # ================= 6. UI 渲染邏輯 =================
 st.columns(1) 
 
-c_title, c_btn = st.columns([8, 2], vertical_alignment="center")
+# 修復設定按鈕被截斷：調整寬度比例為 7:3
+c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 with c_btn:
@@ -282,7 +283,7 @@ def lending_dashboard_fragment():
     </div>
     """, unsafe_allow_html=True)
 
-    # === 主導航架構 (限制 4 個 Tab) ===
+    # === 主導航架構 ===
     tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["總覽", "部位管理", "市場深度", "決策模型"])
 
     with tab_main:
@@ -310,7 +311,14 @@ def lending_dashboard_fragment():
 
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>績效基準對比 (Benchmark)</div>", unsafe_allow_html=True)
-        etf_data = [{"name": "系統回測年化", "rate": account_apy, "is_base": True}, {"name": "市場基準 A", "rate": 7.50}, {"name": "市場基準 B", "rate": 7.00}, {"name": "高股息標竿", "rate": 8.00}]
+        
+        # 替換為實際的台美股高股息 ETF 對標
+        etf_data = [
+            {"name": "系統回測年化", "rate": account_apy, "is_base": True}, 
+            {"name": "0056 元大高股息", "rate": 7.50}, 
+            {"name": "00878 國泰永續高股息", "rate": 8.00}, 
+            {"name": "00713 元大台灣高息低波", "rate": 7.80}
+        ]
         max_rate = max([item["rate"] for item in etf_data])
 
         grid_html = "<div class='etf-grid'>"
@@ -380,7 +388,7 @@ def lending_dashboard_fragment():
                 st.markdown(cards_html, unsafe_allow_html=True)
 
         else:
-            # 歷史配對：雙層清單卡片視圖
+            # 修復 HTML 外洩：拍平字串，消除 Markdown 引擎對多行縮排的誤判
             matched_data = data.get('matched_trades', [])
             if not matched_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
@@ -396,18 +404,9 @@ def lending_dashboard_fragment():
                     period = m.get('期間', m.get('period', ''))
                     amount = m.get('數量', m.get('amount', 0))
 
-                    cards_html += f"""
-                    <div class='list-view-item'>
-                        <div class='list-view-col-left'>
-                            <div class='list-view-subtext'>{display_time}</div>
-                            <div class='list-view-maintext text-green okx-value-mono'>{rate}</div>
-                        </div>
-                        <div class='list-view-col-right'>
-                            <div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div>
-                            <div class='list-view-subtext'>{period} 天</div>
-                        </div>
-                    </div>
-                    """
+                    # 使用單行串接避免被視為程式碼區塊
+                    cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
+                    
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
