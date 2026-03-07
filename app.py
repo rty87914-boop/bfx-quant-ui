@@ -380,7 +380,6 @@ def lending_dashboard_fragment():
             st.markdown(html_table, unsafe_allow_html=True)
 
     with tab_spy:
-        # 🕵️‍♂️ Spy Mode: 完全透明解析 Fuly 邏輯
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>大盤基準 (Fuly 的參考系)</div>", unsafe_allow_html=True)
         
         m_twap = data.get('market_twap', 0)
@@ -406,26 +405,9 @@ def lending_dashboard_fragment():
                 tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
                 tag_twap_sign = "+" if spread_twap >= 0 else ""
                 
-                cards_html += f"""
-                <div class='okx-item-card' style='border-color: #3b4048;'>
-                    <div class='okx-card-header'>
-                        <span class='okx-tag {tag_twap_class}'>高於大盤 {tag_twap_sign}{spread_twap:.2f}%</span>
-                        <span class='okx-card-amt'>${amt:,.0f}</span>
-                    </div>
-                    <div class='okx-list-item border-bottom'>
-                        <span class='okx-list-label'>Fuly 實際掛出</span>
-                        <span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span>
-                    </div>
-                    <div class='okx-list-item border-bottom'>
-                        <span class='okx-list-label'>VS. 真實 TWAP ({m_twap:.2f}%)</span>
-                        <span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span>
-                    </div>
-                    <div class='okx-list-item'>
-                        <span class='okx-list-label'>VS. 壓力 VWAP ({m_vwap:.2f}%)</span>
-                        <span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{"+" if spread_vwap >= 0 else ""}{spread_vwap:.2f}%</span>
-                    </div>
-                </div>
-                """
+                # 修復了這裡的縮排陷阱，全部壓成單行字串
+                cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>高於大盤 {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Fuly 實際掛出</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>VS. 真實 TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>VS. 壓力 VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
+                
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
             
