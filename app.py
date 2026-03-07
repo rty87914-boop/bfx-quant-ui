@@ -391,12 +391,12 @@ def lending_dashboard_fragment():
     # 🔥 核心新增：狙擊雷達渲染邏輯
     with tab_radar:
         top_bids = data.get('top_bids', [])
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>🎯 市場最高需求 (借款人掛單)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>市場最高需求 (借款人掛單)</div>", unsafe_allow_html=True)
         
         if not top_bids:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>目前訂單簿無借款需求數據，等待 Worker 同步中...</div>", unsafe_allow_html=True)
         else:
-            st.info("💡 **手動截胡提示**：如果您看到標註「🚨 極品肥羊」(例如 >12% 且 120天) 的單子，代表此時市場上有大戶正等著借錢。您可以立即打開 Bitfinex APP，以**完全相同的天期**與**等於/略低的利率**手動掛單借出，系統會瞬間為您配對鎖定！")
+            st.info("💡 **手動截胡提示**：如果您看到標註「極品肥羊」(例如 >12% 且 120天) 的單子，代表此時市場上有大戶正等著借錢。您可以立即打開 Bitfinex APP，以**完全相同的天期**與**等於/略低的利率**手動掛單借出，系統會瞬間為您配對鎖定！")
             
             cards_html = "<div class='okx-card-grid'>"
             for b in top_bids:
@@ -407,7 +407,7 @@ def lending_dashboard_fragment():
                 # 自動判斷是不是肥羊 (大於 10% 且天期夠長)
                 is_fat_sheep = rate >= 10.0 and period >= 120
                 tag_class = "tag-red" if is_fat_sheep else ("tag-yellow" if rate >= 10.0 else "tag-gray")
-                tag_text = "🚨 極品肥羊" if is_fat_sheep else ("🔥 高利需求" if rate >= 10.0 else "一般需求")
+                tag_text = "極品肥羊" if is_fat_sheep else ("高利需求" if rate >= 10.0 else "一般需求")
                 border_color = "#ff4d4f" if is_fat_sheep else ("#fcd535" if rate >= 10.0 else "#3b4048")
                 
                 cards_html += f"""
