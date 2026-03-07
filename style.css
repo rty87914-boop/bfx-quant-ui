@@ -3,11 +3,10 @@
 /* ================= 1. 終極防跑版全域重置 ================= */
 html, body, [data-testid="stAppViewContainer"], .main { 
     font-family: 'Inter', 'PingFang TC', sans-serif !important;
-    overscroll-behavior-y: none !important; /* 防止 Safari 彈性滾動造成的白邊 */
+    overscroll-behavior-y: none !important; 
     -webkit-text-size-adjust: 100%; 
     -webkit-tap-highlight-color: transparent; 
     
-    /* 核心殺手鐧：絕對禁止任何元素超出螢幕寬度 */
     max-width: 100% !important; 
     width: 100% !important;
     overflow-x: hidden !important; 
@@ -15,23 +14,18 @@ html, body, [data-testid="stAppViewContainer"], .main {
     padding: 0 !important;
 }
 
-/* 強制所有元素內縮，防撐爆 */
 * { box-sizing: border-box !important; }
-
-/* 隱藏原生滾動條 */
 ::-webkit-scrollbar { display: none !important; }
-
-/* 隱藏 Streamlit 干擾元件 */
 header[data-testid="stHeader"], footer, .stSpinner, .stMarkdown a { display: none !important; pointer-events: none; }
 #MainMenu { visibility: hidden !important; }
 .stAppDeployButton { display: none !important; }
 
-/* ================= 2. 主容器安全邊界適配 ================= */
+/* ================= 2. 主容器適配 ================= */
 .block-container { 
     width: 100% !important;
     max-width: 100% !important; 
-    /* 底部預留 120px 空間，避免內容被固定的導航列擋住 */
-    padding: env(safe-area-inset-top) 16px calc(120px + env(safe-area-inset-bottom)) 16px !important; 
+    /* 導航回歸上方，底部留白縮減為正常間距即可 */
+    padding: env(safe-area-inset-top) 16px calc(40px + env(safe-area-inset-bottom)) 16px !important; 
     overflow-x: hidden !important; 
 }
 
@@ -61,62 +55,64 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
 }
 [data-testid="stPopover"] button:active { transform: scale(0.95) !important; background: #1a1d24 !important; }
 
-/* ================= 4. 🎯 真·底部導航列 (Tab Bar) ================= */
-/* 鎖定包裹 Tab 的最外層容器，確保沒有額外的 margin/padding 撐開畫面 */
+/* ================= 4. 🎯 頂部導航列 (恢復上方自然排列) ================= */
 [data-testid="stTabs"] { 
     display: flex; 
     flex-direction: column; 
     width: 100% !important;
+    margin-top: 10px;
 }
 
-/* 隱藏 Streamlit 用來裝 Tablist 的那個多餘的容器邊距 */
 [data-testid="stTabs"] > div:first-child { 
-    margin: 0 !important; 
+    margin: 0 0 16px 0 !important; 
     padding: 0 !important; 
+    border-bottom: 1px solid #1a1d24 !important; /* 底部加一條暗線區隔內容 */
 }
 
-/* 終極鎖定：直接抓取 role="tablist" 這個元素，把它死死釘在底部 */
 [data-testid="stTabs"] [role="tablist"] { 
-    position: fixed !important; 
-    bottom: 0 !important; 
-    left: 0 !important; 
-    width: 100% !important; 
-    background-color: rgba(12, 14, 18, 0.95) !important; 
-    backdrop-filter: blur(20px) !important; 
-    -webkit-backdrop-filter: blur(20px) !important; 
-    z-index: 99999 !important; 
-    border-top: 1px solid #1a1d24 !important; 
-    /* iOS 底部安全距離 */
-    padding: 12px 10px calc(12px + env(safe-area-inset-bottom)) 10px !important; 
     display: flex !important; 
-    justify-content: space-around !important; 
+    width: 100% !important; 
+    justify-content: space-between !important; 
     margin: 0 !important;
+    padding: 0 0 8px 0 !important;
     gap: 0 !important;
+    overflow-x: auto !important; /* 確保不會撐爆外層 */
 }
 
-/* Tab 按鈕本體 */
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {
+    display: none !important;
+}
+
 [data-testid="stTabs"] [role="tab"] { 
-    flex: 1 !important; 
+    flex: 1 1 auto !important; 
     display: flex !important; 
     justify-content: center !important; 
     color: #7a808a !important; 
     font-weight: 500 !important; 
-    font-size: 0.85rem !important; /* 字體稍微縮小，確保四個字不會太擠 */
+    font-size: 0.95rem !important; 
     padding: 8px 4px !important; 
     background: transparent !important;
     border: none !important; 
     transition: all 0.2s ease !important; 
-    white-space: nowrap !important; /* 絕對不准換行 */
+    white-space: nowrap !important; 
 }
-[data-testid="stTabs"] [role="tab"]:active { transform: scale(0.85) !important; opacity: 0.7 !important; }
+
+[data-testid="stTabs"] [role="tab"]:active { 
+    transform: scale(0.95) !important; 
+    opacity: 0.7 !important; 
+}
+
+/* 維持你喜歡的白字發光選中風格 */
 [data-testid="stTabs"] [role="tab"][aria-selected="true"] { 
     color: #ffffff !important; 
     font-weight: 700 !important; 
     text-shadow: 0 0 8px rgba(255, 255, 255, 0.2) !important; 
 }
 
-/* 隱藏預設的紅色底線指標 */
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none !important; }
+/* 隱藏預設紅色底線 */
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { 
+    display: none !important; 
+}
 
 
 /* ================= 5. 組件視覺風格與網格 ================= */
