@@ -184,7 +184,6 @@ else:
 # ================= 6. UI 渲染邏輯 =================
 st.columns(1) 
 
-# 修復設定按鈕被截斷：調整寬度比例為 7:3
 c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
@@ -312,12 +311,12 @@ def lending_dashboard_fragment():
         account_apy = data.get('hist_apy', 0)
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>績效基準對比 (Benchmark)</div>", unsafe_allow_html=True)
         
-        # 替換為實際的台美股高股息 ETF 對標
+        # 替換為實際的台美股高股息 ETF 對標並精簡名稱防跑版
         etf_data = [
             {"name": "系統回測年化", "rate": account_apy, "is_base": True}, 
             {"name": "0056 元大高股息", "rate": 7.50}, 
-            {"name": "00878 國泰永續高股息", "rate": 8.00}, 
-            {"name": "00713 元大台灣高息低波", "rate": 7.80}
+            {"name": "00878 國泰高息", "rate": 8.00}, 
+            {"name": "00713 元大高息低波", "rate": 7.80}
         ]
         max_rate = max([item["rate"] for item in etf_data])
 
