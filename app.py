@@ -383,11 +383,19 @@ def lending_dashboard_fragment():
             
             html_table = "<div class='okx-panel' style='padding: 0; overflow: hidden;'><table style='width: 100%; text-align: left; border-collapse: collapse; font-size: 0.95rem;'><thead><tr style='border-bottom: 1px solid #2b3139; background-color: #0c0e12; color: #7a808a;'><th style='padding: 16px; font-weight: 500;'>時間</th><th style='padding: 16px; font-weight: 500;'>年化率 (%)</th><th style='padding: 16px; font-weight: 500;'>天期</th><th style='padding: 16px; text-align: right; font-weight: 500;'>規模</th></tr></thead><tbody>"
             for m in matched_data:
-                html_table += f"<tr style='border-bottom: 1px solid #1a1d24;'><td style='padding: 16px; color: #848e9c; font-family: \"JetBrains Mono\", monospace;'>{m.get('時間', '')}</td><td style='padding: 16px;' class='text-green okx-value-mono'>{m.get('利率', '')}</td><td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{m.get('期間', '')}</td><td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{m.get('數量', 0):,.0f}</td></tr>"
+                # 修復時間無法顯示的問題：嘗試抓取多種常見時間欄位，並過濾轉換為台灣時間
+                raw_time = m.get('created_at', m.get('時間', m.get('time', m.get('match_time', '尚未同步'))))
+                display_time = get_taiwan_time(raw_time) if raw_time else ''
+                
+                # 兼容不同資料結構的欄位名稱
+                rate = m.get('利率', m.get('rate', ''))
+                period = m.get('期間', m.get('period', ''))
+                amount = m.get('數量', m.get('amount', 0))
+
+                html_table += f"<tr style='border-bottom: 1px solid #1a1d24;'><td style='padding: 16px; color: #848e9c; font-family: \"JetBrains Mono\", monospace;'>{display_time}</td><td style='padding: 16px;' class='text-green okx-value-mono'>{rate}</td><td style='padding: 16px; color: #ffffff;' class='okx-value-mono'>{period}</td><td style='padding: 16px; text-align: right; color: #ffffff;' class='okx-value-mono'>{amount:,.0f}</td></tr>"
             html_table += "</tbody></table></div>"
             st.markdown(html_table, unsafe_allow_html=True)
 
-    # 修復版：市場深度分析 (原狙擊雷達)
     with tab_radar:
         top_bids = data.get('top_bids', [])
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>訂單簿深度分析 (買方需求)</div>", unsafe_allow_html=True)
@@ -408,7 +416,6 @@ def lending_dashboard_fragment():
                 tag_text = "高溢價長單" if is_fat_sheep else ("高利需求" if rate >= 10.0 else "一般需求")
                 border_color = "#ff4d4f" if is_fat_sheep else ("#fcd535" if rate >= 10.0 else "#3b4048")
                 
-                # 修復了縮排導致的 Markdown 解析錯誤
                 cards_html += f"<div class='okx-item-card' style='border-color: {border_color};'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{tag_text}</span><span class='okx-card-amt'>${vol:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>借款方報價 (APY)</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.2rem;'>{rate:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>要求存續期</span><span class='okx-list-value okx-value-mono' style='color:#ffffff;'>{period} 天</span></div></div>"
                 
             cards_html += "</div>"
