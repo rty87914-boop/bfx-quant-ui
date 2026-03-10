@@ -35,7 +35,6 @@ _ = st.components.v1.html("""<script>
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
     
-    // 監聽 Tab 點擊事件，自動回到頂部 (放在上方導航也同樣適用)
     function setupTabAutoScroll() {
         const parentDoc = window.parent.document;
         parentDoc.addEventListener('click', function(e) {
@@ -132,8 +131,8 @@ def format_time_smart(seconds):
     if not seconds or seconds >= 9999999: return "--"
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
-    if h >= 24: return f"{h // 24}天 {h % 24}小時"
-    return f"{h}h {m}m"
+    if h >= 24: return f"{h // 24}D {h % 24}H"
+    return f"{h}H {m}M"
 
 def parse_wait_time(time_str):
     if "h" in time_str and "m" in time_str:
@@ -141,7 +140,7 @@ def parse_wait_time(time_str):
         try:
             h = int(parts[0].strip())
             m = parts[1].replace("m","").strip()
-            if h >= 24: return f"{h // 24}天 {h % 24}小時"
+            if h >= 24: return f"{h // 24}D {h % 24}H"
         except: pass
     return time_str
 
@@ -453,7 +452,43 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_spy:
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>決策模型反向工程</div>", unsafe_allow_html=True)
+        # ----------------- 新增：機器學習預測與高利雷達狀態 -----------------
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與概率預測 (Regime Prediction)</div>", unsafe_allow_html=True)
+        
+        pred_metrics = data.get("prediction_metrics", {})
+        spike_prob = pred_metrics.get("spike_probability_pct", 0.0)
+        is_sniper = pred_metrics.get("is_sniper_mode_active", False)
+        obi_val = pred_metrics.get("current_obi", 0.0)
+        spike_target = pred_metrics.get("suggested_spike_target", 0.0)
+
+        mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
+        mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
+        prob_color = "#ff4d4f" if spike_prob >= 70 else ("#fcd535" if spike_prob >= 40 else "#7a808a")
+
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem;">{mode_text}</div>
+            </div>
+            <div class="stats-2-col" style="margin-bottom: 0;">
+                <div>
+                    <div class="okx-label">高利爆發機率 ($P_{{spike}}$)</div>
+                    <div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div>
+                </div>
+                <div>
+                    <div class="okx-label">訂單簿失衡度 (OBI)</div>
+                    <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{obi_val:.3f}</div>
+                </div>
+                <div>
+                    <div class="okx-label">建議狙擊目標</div>
+                    <div class="okx-value-mono text-green" style="font-size:1.2rem;">{f'{spike_target:.2f}%' if spike_target > 0 else '--'}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ----------------- 既有：決策模型反向工程 -----------------
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>常態決策模型反向工程</div>", unsafe_allow_html=True)
         
         if not bot_decisions or len(bot_decisions) < 5:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>樣本量不足，系統持續採集特徵中...</div>", unsafe_allow_html=True)
@@ -535,7 +570,7 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 實體隱形墊片：因為取消了底部固定導航，稍微縮減高度，留出舒服的滑動空間即可
+    # 實體隱形墊片
     st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
 # ----------------- 模組 B：DOT 淨本金面板 -----------------
