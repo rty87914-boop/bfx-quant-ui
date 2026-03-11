@@ -473,6 +473,10 @@ def lending_dashboard_fragment():
         mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
         mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
         prob_color = "#ff4d4f" if spike_prob >= 70 else ("#fcd535" if spike_prob >= 40 else "#7a808a")
+        
+        # 動態調整建議目標的顯示顏色：常態下為灰色參考，觸發時亮綠色
+        target_color = "text-green" if is_sniper else ""
+        target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
 
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
@@ -489,8 +493,8 @@ def lending_dashboard_fragment():
                     <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{obi_val:.3f}</div>
                 </div>
                 <div>
-                    <div class="okx-label">建議狙擊目標</div>
-                    <div class="okx-value-mono text-green" style="font-size:1.2rem;">{f'{spike_target:.2f}%' if spike_target > 0 else '--'}</div>
+                    <div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div>
+                    <div class="okx-value-mono {target_color}" style="font-size:1.2rem; {target_style}">{f'{spike_target:.2f}%'}</div>
                 </div>
             </div>
         </div>
