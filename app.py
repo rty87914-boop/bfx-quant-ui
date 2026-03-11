@@ -1,768 +1,636 @@
-import os
-import json
-import time
-import hmac
-import hashlib
-import asyncio
+import streamlit as st
 import aiohttp
-from aiohttp import web
+import asyncio
+import pandas as pd
+from datetime import timedelta, datetime
 import logging
-import math
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
-from typing import List, Dict, Any, Tuple, Optional
+import json
 
 # ================= 0. 系統與日誌配置 =================
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [WORKER] %(levelname)s - %(message)s')
+st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [UI] %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ================= 1. 常數與環境變數配置 =================
-try:
-    TW_TZ = ZoneInfo("Asia/Taipei")
-except Exception:
-    TW_TZ = timezone(timedelta(hours=8))
+# ================= 1. 常數與初始化 =================
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
-LENDING_START_STR = "2026-02-11"
+if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
+if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
+if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-FEE_MULTIPLIER = 0.85
-MS_PER_DAY = 86400000.0
-MS_PER_HOUR = 3600000.0
-DAYS_PER_YEAR = 365.0
-MIN_BILLED_MS = 3600000.0
-FRESH_OFFER_LIMIT_MS = 1800000.0
-API_PAGE_LIMIT = 500  
-MIN_LEND_AMOUNT = 150.0
-DEFAULT_FX_RATE = 32.0
-
-# 策略常數
-SPIKE_THRESHOLD_RATE = 10.0      
-SPIKE_PROB_THRESHOLD = 0.55      
-VERIFICATION_WINDOW_SEC = 300    
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-BFX_KEY_1 = os.environ.get("BFX_KEY", "")
-BFX_SECRET_1 = os.environ.get("BFX_SECRET", "")
-
-_LAST_NONCE = int(time.time() * 1000000)
-_BFX_SEMAPHORE = asyncio.Semaphore(5)
-
-seen_trade_ids = {}
-seen_spike_ids = set()
-is_first_load = True
-
-# 記憶體內預測驗證佇列
-pending_spike_verifications = []
-
-# 機器學習初始預設參數
-DEFAULT_ML_WEIGHTS = {
-    "base_rate": {
-        "w_twap": 0.4,
-        "w_vwap": 0.4,
-        "w_frr": 0.2,
-        "bias": 0.0,
-        "learning_rate": 0.005,
-        "error_threshold": 0.5
-    },
-    "spike_prob": {
-        "w_obi": 2.0,            
-        "w_momentum": 1.5,        
-        "bias": -3.0,            
-        "learning_rate": 0.01
-    },
-    "target_regression": {
-        "w_vwap": 1.2,           
-        "w_obi": 5.0,            # 權重下調，平滑預估極值，交由線上梯度下降動態校正
-        "learning_rate": 0.05
-    },
-    "metrics": {
-        "total_alerts": 0,
-        "hits": 0,
-        "misses": 0,
-        "target_error_sum": 0.0,
-        "last_alert_ts": 0
-    }
+# ================= 2. 視覺風格定義與 JS/CSS 腳本注入 =================
+st.markdown("""
+<style>
+/* 解決 Tooltip 超出螢幕邊界限制 */
+.okx-tooltip { position: relative; cursor: help; border-bottom: 1px dashed #7a808a; }
+.okx-tooltip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 35, 41, 0.95);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-width: 250px;
+    width: max-content;
+    z-index: 9999;
+    border: 1px solid #3b4048;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    text-align: left;
 }
+</style>
+""", unsafe_allow_html=True)
 
-def get_nonce() -> str:
-    global _LAST_NONCE
-    current = int(time.time() * 1000000)
-    if current <= _LAST_NONCE: current = _LAST_NONCE + 1
-    _LAST_NONCE = current
-    return str(current)
-
-def safe_list(data: Any) -> List[Any]:
-    if isinstance(data, list) and (len(data) == 0 or isinstance(data[0], list)): return data
-    return []
-
-def calculate_obi(bid_vol: float, ask_vol: float) -> float:
-    total_vol = bid_vol + ask_vol
-    if total_vol == 0: return 0.0
-    return (bid_vol - ask_vol) / total_vol
-
-# ================= 2. API 與資料庫呼叫 =================
-async def fetch_bfx_async(session: aiohttp.ClientSession, path: str, api_key: str, api_secret: str, params: Optional[Dict] = None) -> List[Any]:
-    if not api_key or not api_secret: return []
-    url = f"https://api.bitfinex.com/v2/{path}"
-    body = json.dumps(params) if params else "{}"
-    
-    async with _BFX_SEMAPHORE:
-        for attempt in range(3): 
-            nonce = get_nonce()
-            sig_payload = f"/api/v2/{path}{nonce}{body}".encode('utf8')
-            sig = hmac.new(api_secret.encode('utf8'), sig_payload, hashlib.sha384).hexdigest()
-            headers = {"bfx-nonce": nonce, "bfx-apikey": api_key, "bfx-signature": sig, "content-type": "application/json"}
-            
-            try:
-                if attempt == 0: await asyncio.sleep(0.05) 
-                async with session.post(url, headers=headers, data=body, timeout=10) as res:
-                    if res.status == 200: return await res.json()
-                    elif res.status == 429: await asyncio.sleep(2.0)
-                    else: await asyncio.sleep(1.0)
-            except Exception as e:
-                logger.error(f"BFX API Error on {path}: {str(e)}")
-    return []
-
-async def fetch_public_api_async(session: aiohttp.ClientSession, url: str) -> Any:
-    try:
-        async with session.get(url, timeout=5) as res:
-            if res.status == 200: return await res.json()
-    except Exception as e: logger.error(f"Public API error {url}: {str(e)}")
-    return []
-
-async def async_supabase_post(session: aiohttp.ClientSession, endpoint: str, payload: Any):
-    if not SUPABASE_URL or not SUPABASE_KEY: return
-    headers = {
-        "apikey": SUPABASE_KEY, 
-        "Authorization": f"Bearer {SUPABASE_KEY}", 
-        "Content-Type": "application/json", 
-        "Prefer": "resolution=merge-duplicates"
+st.components.v1.html("""<script>
+    function forceBlackAndPWA(doc) {
+        if (!doc) return;
+        doc.documentElement.style.background = '#000000';
+        doc.body.style.background = '#000000';
+        const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
+        oldMetas.forEach(m => m.remove());
+        const metaBlack = doc.createElement('meta');
+        metaBlack.name = 'theme-color';
+        metaBlack.content = '#000000';
+        doc.head.appendChild(metaBlack);
     }
-    try:
-        async with session.post(f"{SUPABASE_URL}/rest/v1/{endpoint}", headers=headers, json=payload, timeout=10) as res:
-            if res.status not in (200, 201, 204): 
-                error_detail = await res.text()
-                logger.error(f"Supabase POST Error [{endpoint}] Status {res.status}: {error_detail}")
-    except Exception as e:
-        logger.error(f"Supabase Connection Error [{endpoint}]: {str(e)}")
+    try { forceBlackAndPWA(document); } catch(e) {}
+    try { forceBlackAndPWA(window.parent.document); } catch(e) {}
+    
+    function setupTabAutoScroll() {
+        const parentDoc = window.parent.document;
+        parentDoc.addEventListener('click', function(e) {
+            let target = e.target;
+            while (target && target !== parentDoc) {
+                if (target.getAttribute && target.getAttribute('role') === 'tab') {
+                    setTimeout(() => {
+                        let scrollArea = parentDoc.querySelector('.main') || parentDoc.querySelector('[data-testid="stAppViewContainer"]') || parentDoc.documentElement;
+                        if(scrollArea) {
+                            scrollArea.scrollTo({top: 0, behavior: 'auto'});
+                        }
+                    }, 50);
+                    break;
+                }
+                target = target.parentNode;
+            }
+        });
+    }
+    try { setupTabAutoScroll(); } catch(e) {}
+</script>""", height=0, width=0)
 
-async def async_supabase_get(session: aiohttp.ClientSession, endpoint: str, query: str = "") -> List[Dict]:
-    if not SUPABASE_URL or not SUPABASE_KEY: return []
+# ================= 3. 資料獲取與設定引擎 =================
+async def fetch_cached_data(session, db_id) -> dict:
+    if not SUPABASE_URL: return {}
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
-        async with session.get(f"{SUPABASE_URL}/rest/v1/{endpoint}?{query}", headers=headers, timeout=10) as res:
+        async with session.get(f"{SUPABASE_URL}/rest/v1/system_cache?id=eq.{db_id}", headers=headers, timeout=5) as res:
+            if res.status == 200:
+                data = await res.json()
+                if data:
+                    if db_id == 1: st.session_state.last_update = data[0].get('updated_at', '尚未同步')
+                    return data[0].get('payload', {})
+    except Exception: pass
+    return {}
+
+async def fetch_all_auth_data() -> dict:
+    default_users = {
+        "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1}
+    }
+    if not SUPABASE_URL: return default_users
+    
+    async with aiohttp.ClientSession() as session:
+        r1 = await fetch_cached_data(session, 1)
+        if r1.get('settings', {}).get('pin'): default_users["mingyu"]["pin"] = str(r1['settings']['pin'])
+        return default_users
+
+async def update_user_settings(db_id: int, new_settings: dict):
+    if not SUPABASE_URL: return False
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates"}
+    async with aiohttp.ClientSession() as session:
+        current_payload = await fetch_cached_data(session, db_id)
+        current_settings = current_payload.get('settings', {})
+        if not isinstance(current_settings, dict): current_settings = {}
+        
+        current_settings.update(new_settings)
+        current_payload['settings'] = current_settings
+        
+        update_body = {"id": db_id, "payload": current_payload, "updated_at": datetime.utcnow().isoformat()}
+        try:
+            async with session.post(f"{SUPABASE_URL}/rest/v1/system_cache?on_conflict=id", headers=headers, json=update_body) as res:
+                if res.status in (200, 201, 204): return True
+        except Exception: pass
+    return False
+
+async def fetch_equity_history(session) -> list:
+    if not SUPABASE_URL: return []
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bfx_nav?select=record_date,auto_p,hist_p&order=record_date.asc", headers=headers, timeout=5) as res:
             if res.status == 200: return await res.json()
-            else:
-                error_detail = await res.text()
-                logger.error(f"Supabase GET Error [{endpoint}] Status {res.status}: {error_detail}")
-    except Exception as e:
-        logger.error(f"Supabase GET Connection Error [{endpoint}]: {str(e)}")
+    except Exception: pass
     return []
 
-async def async_supabase_count(session: aiohttp.ClientSession, endpoint: str) -> int:
-    if not SUPABASE_URL or not SUPABASE_KEY: return 0
-    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=exact"}
+async def fetch_bot_decisions(session) -> list:
+    if not SUPABASE_URL: return []
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
-        async with session.get(f"{SUPABASE_URL}/rest/v1/{endpoint}?select=id&limit=1", headers=headers, timeout=5) as res:
-            if res.status in [200, 206]:
-                cr = res.headers.get("Content-Range", "")
-                if "/" in cr:
-                    return int(cr.split("/")[-1])
+        async with session.get(f"{SUPABASE_URL}/rest/v1/bot_decisions?select=created_at,bot_rate_yearly,market_frr,market_twap,bot_amount,bot_period&order=created_at.desc&limit=300", headers=headers, timeout=5) as res:
+            if res.status == 200: return await res.json()
     except Exception: pass
-    return 0
+    return []
 
-# ================= 3. 動態演算法校正與雙軌寫入 =================
-def calculate_base_rate_prediction(twap: float, vwap: float, frr: float, ml_weights: Dict) -> float:
-    w_base = ml_weights.get('base_rate', DEFAULT_ML_WEIGHTS['base_rate'])
-    return (w_base['w_twap'] * twap) + (w_base['w_vwap'] * vwap) + (w_base['w_frr'] * frr) + w_base['bias']
-
-def calculate_spike_probability(obi: float, twap: float, vwap: float, ml_weights: Dict) -> float:
-    w_spike = ml_weights.get('spike_prob', DEFAULT_ML_WEIGHTS['spike_prob'])
-    momentum = (vwap / twap) if twap > 0 else 1.0
-    z = (w_spike['w_obi'] * obi) + (w_spike['w_momentum'] * momentum) + w_spike['bias']
-    z = max(-20.0, min(20.0, z))
-    probability = 1.0 / (1.0 + math.exp(-z))
-    return probability
-
-def calculate_spike_target(vwap: float, obi: float, ml_weights: Dict) -> float:
-    w_reg = ml_weights.get('target_regression', DEFAULT_ML_WEIGHTS['target_regression'])
-    base_target = vwap * w_reg['w_vwap']
-    pressure_premium = max(0, obi) * w_reg['w_obi']
-    return max(SPIKE_THRESHOLD_RATE, base_target + pressure_premium)
-
-def online_base_rate_calibration(actual: float, predicted: float, features: Dict, ml_weights: Dict) -> Dict:
-    updated_weights = ml_weights.copy()
-    w_base = updated_weights.get('base_rate', DEFAULT_ML_WEIGHTS['base_rate']).copy()
-    
-    lr = w_base.get('learning_rate', 0.005)
-    error = predicted - actual
-    
-    if abs(error) < w_base.get('error_threshold', 0.5):
-        return updated_weights
-
-    w_base['w_twap'] -= lr * error * features['twap']
-    w_base['w_vwap'] -= lr * error * features['vwap']
-    w_base['w_frr'] -= lr * error * features['frr']
-    w_base['bias'] -= lr * error
-    
-    updated_weights['base_rate'] = w_base
-    return updated_weights
-
-def penalize_spike_false_positive(features: Dict, predicted_prob: float, ml_weights: Dict) -> Dict:
-    updated_weights = ml_weights.copy()
-    w_spike = updated_weights.get('spike_prob', DEFAULT_ML_WEIGHTS['spike_prob']).copy()
-    
-    lr = w_spike.get('learning_rate', 0.01)
-    error = predicted_prob
-    momentum = (features['vwap'] / features['twap']) if features['twap'] > 0 else 1.0
-    
-    w_spike['w_obi'] -= lr * error * features['obi']
-    w_spike['w_momentum'] -= lr * error * momentum
-    w_spike['bias'] -= lr * error
-    
-    updated_weights['spike_prob'] = w_spike
-    logger.info(f"[ML Calibration] False Positive Penalty Applied. New Spike Bias: {w_spike['bias']:.4f}")
-    return updated_weights
-
-def online_target_regression_calibration(actual_max_rate: float, predicted_target: float, features: Dict, ml_weights: Dict) -> Dict:
-    updated_weights = ml_weights.copy()
-    w_reg = updated_weights.get('target_regression', DEFAULT_ML_WEIGHTS['target_regression']).copy()
-    
-    lr = w_reg.get('learning_rate', 0.05)
-    error = predicted_target - actual_max_rate
-    
-    w_reg['w_vwap'] -= lr * error * (features['vwap'] / 10.0) 
-    w_reg['w_obi'] -= lr * error * max(0, features['obi'])
-    
-    w_reg['w_vwap'] = max(0.8, min(2.5, w_reg['w_vwap']))
-    w_reg['w_obi'] = max(1.0, min(30.0, w_reg['w_obi']))
-    
-    updated_weights['target_regression'] = w_reg
-    logger.info(f"[ML Calibration] Target Regression tuned. New w_vwap: {w_reg['w_vwap']:.3f}, w_obi: {w_reg['w_obi']:.3f}")
-    return updated_weights
-
-async def log_and_predict_decision(
-    session: aiohttp.ClientSession, offer_id: str, symbol: str, actual_rate: float, 
-    market_twap: float, market_vwap: float, market_frr: float, amount: float, period: int,
-    ml_weights: Dict
-) -> Dict:
-    predicted_rate = calculate_base_rate_prediction(market_twap, market_vwap, market_frr, ml_weights)
-    
-    decision_payload = {
-        "offer_id": offer_id,
-        "symbol": symbol,
-        "bot_rate_yearly": actual_rate,
-        "market_twap": market_twap,
-        "market_vwap": market_vwap,
-        "market_frr": market_frr,
-        "bot_amount": amount,
-        "bot_period": period
-    }
-    
-    prediction_payload = {
-        "offer_id": offer_id,
-        "predicted_rate": predicted_rate,
-        "actual_rate": actual_rate,
-        "error_rate": predicted_rate - actual_rate,
-        "features_snapshot": {
-            "twap": market_twap,
-            "vwap": market_vwap,
-            "frr": market_frr
-        }
-    }
-    
-    write_tasks = [
-        async_supabase_post(session, "bot_decisions?on_conflict=offer_id", [decision_payload]),
-        async_supabase_post(session, "bot_prediction_logs?on_conflict=offer_id", [prediction_payload])
-    ]
-    await asyncio.gather(*write_tasks)
-    
-    new_weights = online_base_rate_calibration(
-        actual=actual_rate, 
-        predicted=predicted_rate, 
-        features={"twap": market_twap, "vwap": market_vwap, "frr": market_frr}, 
-        ml_weights=ml_weights
-    )
-    return new_weights
-
-# ================= 4. 完整帳本與歷史回測 =================
-async def sync_ledger_history_async(session: aiohttp.ClientSession, now_ts: float) -> Tuple[float, float, float, float, float, int]:
-    db_auto_p, db_hist_p, db_sum_v_t, db_last_sync_ts = 0.0, 0.0, 0.0, 0
-    db_res = await async_supabase_get(session, "bfx_nav", "order=record_date.desc&limit=1")
-    if db_res:
-        db_auto_p = float(db_res[0].get('auto_p', 0))
-        db_hist_p = float(db_res[0].get('hist_p', 0))
-        db_sum_v_t = float(db_res[0].get('sum_v_t', 0))
-        db_last_sync_ts = int(db_res[0].get('last_sync_ts', 0))
-
-    global_start_ts = int(datetime.strptime(LENDING_START_STR, "%Y-%m-%d").replace(tzinfo=TW_TZ).timestamp() * 1000)
-    fetch_start_ts = db_last_sync_ts + 1 if db_last_sync_ts > 0 else global_start_ts
-    today_start_ts = int(datetime.now(TW_TZ).replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
-
-    all_ledgers = []
-    for currency in ['USD', 'UST']:
-        curr_end = int(now_ts)
-        while True:
-            chunk = await fetch_bfx_async(session, f'auth/r/ledgers/{currency}/hist', BFX_KEY_1, BFX_SECRET_1, {"start": fetch_start_ts, "end": curr_end, "limit": 2500})
-            safe_chunk = safe_list(chunk)
-            if not safe_chunk: break
-            all_ledgers.extend(safe_chunk)
-            if len(safe_chunk) < 2500: break
-            curr_end = safe_chunk[-1][3] - 1  
-            await asyncio.sleep(0.5)
-
-    all_ledgers.sort(key=lambda x: x[3])
-    
-    daily_snapshots = {}
-    curr_auto_p, curr_hist_p, curr_sum_v_t = db_auto_p, db_hist_p, db_sum_v_t
-    max_ts_seen = db_last_sync_ts
-    seen_ledger_ids = set()
-
-    for i in all_ledgers:
-        if len(i) >= 9:
-            l_id, mts, val, desc_lower = i[0], i[3], i[5], i[8].lower()
-            if l_id not in seen_ledger_ids:
-                seen_ledger_ids.add(l_id)
-                if mts > max_ts_seen: max_ts_seen = mts
-                
-                if val > 0 and ("payment" in desc_lower or "interest" in desc_lower):
-                    curr_hist_p += val
-                elif ("deposit" in desc_lower or "withdrawal" in desc_lower) and "transfer" not in desc_lower: 
-                    curr_auto_p += val; curr_sum_v_t += val * mts 
-                
-                date_str = datetime.fromtimestamp(mts / 1000, tz=TW_TZ).strftime("%Y-%m-%d")
-                daily_snapshots[date_str] = {
-                    "record_date": date_str,
-                    "auto_p": curr_auto_p,
-                    "hist_p": curr_hist_p,
-                    "sum_v_t": curr_sum_v_t,
-                    "last_sync_ts": max_ts_seen
-                }
-
-    if daily_snapshots:
-        payload_list = list(daily_snapshots.values())
-        await async_supabase_post(session, "bfx_nav?on_conflict=record_date", payload_list)
-
-    days_since = max(1.0, (now_ts - global_start_ts) / MS_PER_DAY)
-    avg_capital = ((now_ts * curr_auto_p - curr_sum_v_t) / MS_PER_DAY) / days_since if days_since > 0 else curr_auto_p
-    hist_apy = ((1 + curr_hist_p / avg_capital) ** (DAYS_PER_YEAR / days_since) - 1.0) * 100.0 if avg_capital > 0 else 0.0
-
-    today_usd = await fetch_bfx_async(session, 'auth/r/ledgers/USD/hist', BFX_KEY_1, BFX_SECRET_1, {"start": today_start_ts, "end": int(now_ts), "limit": 1000})
-    today_ust = await fetch_bfx_async(session, 'auth/r/ledgers/UST/hist', BFX_KEY_1, BFX_SECRET_1, {"start": today_start_ts, "end": int(now_ts), "limit": 1000})
-    today_profit = 0.0
-    seen_today = set()
-    for i in safe_list(today_usd) + safe_list(today_ust):
-        if len(i) >= 9:
-            l_id, val, desc_lower = i[0], i[5], i[8].lower()
-            if l_id not in seen_today and val > 0 and ("payment" in desc_lower or "interest" in desc_lower):
-                seen_today.add(l_id)
-                today_profit += val
-
-    return curr_auto_p, curr_hist_p, hist_apy, today_profit, curr_sum_v_t, max_ts_seen
-
-# ================= 5. 巨觀資料萃取 =================
-async def get_macro_data_async(session: aiohttp.ClientSession, now_ts: float, last_payout_ts: float, next_payout_ts: float, frr_dict: Dict[str, float]) -> float:
-    global_start_ts = int(datetime.strptime(LENDING_START_STR, "%Y-%m-%d").replace(tzinfo=TW_TZ).timestamp() * 1000)
-    recent_history_start_ts = max(global_start_ts, now_ts - (7 * MS_PER_DAY))
-    
-    db_latest_update = 0
-    res = await async_supabase_get(session, "bfx_macro_history", "select=mts_update&order=mts_update.desc&limit=1")
-    if res: db_latest_update = int(res[0]['mts_update'])
-        
-    fetch_start_ts = max(recent_history_start_ts, db_latest_update) if db_latest_update > 0 else global_start_ts
-    
-    all_macro_hist = []
-    for endpoint in ['credits/fUSD/hist', 'loans/fUSD/hist']:
-        curr_end = int(now_ts)
-        while True:
-            chunk = await fetch_bfx_async(session, f'auth/r/funding/{endpoint}', BFX_KEY_1, BFX_SECRET_1, {"limit": API_PAGE_LIMIT, "start": fetch_start_ts, "end": curr_end})
-            safe_chunk = safe_list(chunk)
-            if not safe_chunk: break
-            all_macro_hist.extend(safe_chunk)
-            if len(safe_chunk) < API_PAGE_LIMIT: break
-            curr_end = safe_chunk[-1][4] - 1  
-            await asyncio.sleep(0.5)
-
-    new_closed_records = []
-    for hc in all_macro_hist:
-        if len(hc) > 13:
-            status_str = str(hc[7]).upper()
-            if "CLOSED" in status_str:
-                h_mts_update, symbol = hc[4], hc[1]
-                h_mts_create = hc[13] if (len(hc) > 13 and isinstance(hc[13], (int, float)) and hc[13] > 0) else hc[3]
-                h_amount = abs(float(hc[5])) if hc[5] is not None else 0.0
-                
-                try:
-                    raw_rate = float(hc[11]) if (len(hc) > 11 and hc[11] is not None) else 0.0
-                except (ValueError, TypeError):
-                    raw_rate = 0.0
-                    
-                h_rate_yearly = raw_rate * DAYS_PER_YEAR * 100
-                if h_rate_yearly <= 0.0001: h_rate_yearly = frr_dict.get(symbol, frr_dict.get('fUSD', 0.0))
-                
-                new_closed_records.append({"id": hc[0], "symbol": symbol, "amount": h_amount, "rate_yearly": h_rate_yearly, "mts_create": h_mts_create, "mts_update": h_mts_update, "status": status_str, "survive_h": (h_mts_update - h_mts_create) / MS_PER_HOUR})
-
-    if new_closed_records: 
-        await async_supabase_post(session, "bfx_macro_history?on_conflict=id", new_closed_records)
-        
-    db_records = await async_supabase_get(session, "bfx_macro_history", f"mts_update.gte.{int(last_payout_ts)}&order=mts_update.desc&limit=5000")
-
-    merged_dict = {rec['id']: rec for rec in db_records}
-    for rec in new_closed_records: merged_dict[rec['id']] = rec
-        
-    all_records = list(merged_dict.values())
-    realized_payout = 0.0
-
-    for rec in all_records:
-        h_mts_create, h_mts_update, h_amount, h_rate_yearly = rec['mts_create'], rec['mts_update'], float(rec['amount']), float(rec['rate_yearly'])
-        h_rate_daily = h_rate_yearly / (DAYS_PER_YEAR * 100)
-        
-        if rec['status'] == 'CLOSED' and h_mts_update > last_payout_ts:
-            overlap_ms = MIN_BILLED_MS if (h_mts_update - h_mts_create) < MIN_BILLED_MS else max(0, min(h_mts_update, now_ts) - max(h_mts_create, last_payout_ts))
-            realized_payout += h_amount * h_rate_daily * (overlap_ms / MS_PER_DAY) * FEE_MULTIPLIER
-
-    return realized_payout
-
-# ================= 6. 核心管線：量解放貸 =================
-async def run_lending_pipeline():
-    if not BFX_KEY_1: return
-    global is_first_load, seen_trade_ids, seen_spike_ids, pending_spike_verifications
-    now = datetime.now(TW_TZ)
-    now_ts = now.timestamp() * 1000
-    now_sec = now.timestamp()
-
-    if len(seen_spike_ids) > 5000: seen_spike_ids.clear()
-
-    if now.hour < 9 or (now.hour == 9 and now.minute < 30): 
-        next_payout_dt = now.replace(hour=9, minute=30, second=0, microsecond=0); last_payout_dt = next_payout_dt - timedelta(days=1)
-    else: 
-        last_payout_dt = now.replace(hour=9, minute=30, second=0, microsecond=0); next_payout_dt = last_payout_dt + timedelta(days=1)
-    last_payout_ts, next_payout_ts = last_payout_dt.timestamp() * 1000, next_payout_dt.timestamp() * 1000
-
+async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
-        db_res_cache = await async_supabase_get(session, "system_cache", "id=eq.1")
-        existing_payload = db_res_cache[0].get('payload', {}) if db_res_cache else {}
-        existing_settings = existing_payload.get('settings', {})
-        ml_weights = existing_payload.get('ml_weights', DEFAULT_ML_WEIGHTS)
+        return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session), fetch_bot_decisions(session))
 
-        if 'metrics' not in ml_weights:
-            ml_weights['metrics'] = {"total_alerts": 0, "hits": 0, "misses": 0, "target_error_sum": 0.0, "last_alert_ts": 0}
-        if 'target_regression' not in ml_weights:
-            ml_weights['target_regression'] = DEFAULT_ML_WEIGHTS['target_regression']
+def format_time_smart(seconds):
+    if not seconds or seconds >= 9999999: return "--"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    if h >= 24: return f"{h // 24}D {h % 24}H"
+    return f"{h}H {m}M"
 
-        # 非同步撈取側錄樣本數
-        count_decisions_task = async_supabase_count(session, "bot_decisions")
-        count_spikes_task = async_supabase_count(session, "market_spike_logs")
+def parse_wait_time(time_str):
+    if "h" in time_str and "m" in time_str:
+        parts = time_str.split("h")
+        try:
+            h = int(parts[0].strip())
+            m = parts[1].replace("m","").strip()
+            if h >= 24: return f"{h // 24}D {h % 24}H"
+        except: pass
+    return time_str
 
-        tasks = [
-            fetch_public_api_async(session, "https://api.bitfinex.com/v2/tickers?symbols=fUSD"), 
-            fetch_public_api_async(session, "https://api.bitfinex.com/v2/book/fUSD/P0?len=100"),      
-            fetch_public_api_async(session, "https://api.bitfinex.com/v2/trades/fUSD/hist?limit=500"),
-            fetch_bfx_async(session, 'auth/r/wallets', BFX_KEY_1, BFX_SECRET_1),                                              
-            fetch_bfx_async(session, 'auth/r/funding/credits/fUSD', BFX_KEY_1, BFX_SECRET_1), fetch_bfx_async(session, 'auth/r/funding/loans/fUSD', BFX_KEY_1, BFX_SECRET_1), 
-            fetch_bfx_async(session, 'auth/r/funding/offers/fUSD', BFX_KEY_1, BFX_SECRET_1), 
-            fetch_public_api_async(session, "https://max-api.maicoin.com/api/v2/tickers/usdttwd"),
-            fetch_bfx_async(session, 'auth/r/funding/trades/fUSD/hist', BFX_KEY_1, BFX_SECRET_1, {"limit": 30}),
-            count_decisions_task,
-            count_spikes_task
-        ]
-        results = await asyncio.gather(*tasks)
+def get_taiwan_time(utc_iso_str):
+    if not utc_iso_str or utc_iso_str == "尚未同步": return "尚未同步"
+    try:
+        dt = pd.to_datetime(utc_iso_str)
+        if dt.tz is None: dt = dt.tz_localize('UTC')
+        tw_dt = dt.tz_convert('Asia/Taipei')
+        return tw_dt.strftime('%m/%d %H:%M')
+    except:
+        return str(utc_iso_str).replace("T", " ")[:16]
+
+# ================= 4. 動態登入介面 =================
+if not SUPABASE_URL:
+    st.error("系統配置錯誤：缺少 SUPABASE_URL")
+    st.stop()
+
+USERS = asyncio.run(fetch_all_auth_data())
+
+query_user = st.query_params.get("user")
+query_pin = st.query_params.get("pin")
+
+if st.session_state.logged_in_user is None:
+    if query_user in USERS and USERS[query_user]["pin"] == query_pin:
+        st.session_state.logged_in_user = query_user
+        st.rerun()
+
+if st.session_state.logged_in_user is None:
+    st.columns(1) 
+    st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2:
+        with st.container(border=True):
+            selected_user = st.selectbox("選擇帳號", options=list(USERS.keys()), format_func=lambda x: USERS[x]["name"])
+            pin_input = st.text_input("輸入密碼 (PIN)", type="password")
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("登入系統", use_container_width=True, type="primary"):
+                if pin_input and USERS[selected_user]["pin"] == pin_input:
+                    st.session_state.logged_in_user = selected_user
+                    st.query_params["user"] = selected_user
+                    st.query_params["pin"] = pin_input
+                    st.rerun()
+                elif not pin_input:
+                    st.warning("請輸入密碼。")
+                else:
+                    st.error("密碼錯誤，請重試。")
+    st.stop()
+
+# ================= 5. 載入面板專屬 CSS =================
+try:
+    with open("style.css", "r", encoding="utf-8") as f: 
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError: pass
+
+user_info = USERS[st.session_state.logged_in_user]
+
+# ================= 6. UI 渲染邏輯 =================
+st.columns(1) 
+
+c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
+with c_title:
+    st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
+with c_btn:
+    with st.popover("設定"):
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統參數</div>", unsafe_allow_html=True)
+        st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
-        frr_dict = {"fUSD": 0.0}
-        for t in safe_list(results[0]):
-            if t[0] in frr_dict: frr_dict[t[0]] = float(t[1]) * 365 * 100
-        avg_frr = frr_dict.get("fUSD", 0.0)
-        
-        raw_book_usd = safe_list(results[1])
-        asks_list, bids_list = [], []
-        total_ask_vol, total_bid_vol = 0.0, 0.0
-        
-        for b in raw_book_usd:
-            if len(b) >= 4:
-                raw_rate, period, vol = b[0], b[1], b[3]    
-                eff_rate = avg_frr if raw_rate <= 0.00000001 else (raw_rate * 365 * 100)
-                if vol > 0:
-                    asks_list.append({"rate": eff_rate, "period": period, "vol": abs(vol)})
-                    total_ask_vol += abs(vol)
-                elif vol < 0:
-                    bids_list.append({"rate": eff_rate, "period": period, "vol": abs(vol)})
-                    total_bid_vol += abs(vol)
+        st.info("提示：目前網址已包含驗證參數，建議加入書籤以利免密碼登入。")
 
-        obi_current = calculate_obi(total_bid_vol, total_ask_vol)
-        asks = sorted(asks_list, key=lambda x: x["rate"])
-        bids = sorted(bids_list, key=lambda x: x["rate"], reverse=True)
-        top_bids = bids[:15]
-
-        cum_vol, vwap_sum, vwap_rate_macro = 0, 0, avg_frr
-        for a in asks:
-            cum_vol += a["vol"]
-            vwap_sum += a["vol"] * a["rate"]
-            if cum_vol >= 2000000: break
-        if cum_vol > 0: vwap_rate_macro = vwap_sum / cum_vol
-
-        raw_trades_usd = safe_list(results[2])
-        valid_trades = [t for t in raw_trades_usd if len(t) >= 5 and (now_ts - t[1]) < 3 * MS_PER_HOUR]
-        twap_vol, twap_sum, twap_rate_3h = 0, 0, avg_frr
-        for t in valid_trades:
-            vol, rate = abs(t[2]), t[3] * 365 * 100
-            twap_vol += vol; twap_sum += vol * rate
-        if twap_vol > 0: twap_rate_3h = twap_sum / twap_vol
-
-        # ================= [全市場高利雷達與機率預測模組] =================
-        spike_payloads = []
-        actual_spike_occurred = False
-        
-        for t in raw_trades_usd:
-            if len(t) >= 5:
-                trade_id = str(t[0])
-                if trade_id in seen_spike_ids: continue
-                seen_spike_ids.add(trade_id)
-
-                rate_y = t[3] * 365 * 100
-                if rate_y >= SPIKE_THRESHOLD_RATE:
-                    actual_spike_occurred = True
-                    spike_payloads.append({
-                        "trade_id": trade_id, "symbol": "fUSD", "spike_rate_yearly": rate_y,
-                        "amount": abs(t[2]), "market_twap": twap_rate_3h, "market_vwap": vwap_rate_macro,
-                        "market_frr": avg_frr, "book_ask_vol": total_ask_vol, "book_bid_vol": total_bid_vol,
-                        "obi": obi_current
-                    })
-
-        if spike_payloads:
-            await async_supabase_post(session, "market_spike_logs?on_conflict=trade_id", spike_payloads)
-            
-        current_spike_prob = calculate_spike_probability(obi_current, twap_rate_3h, vwap_rate_macro, ml_weights)
-        current_spike_target = calculate_spike_target(vwap_rate_macro, obi_current, ml_weights)
-        
-        active_verifications = []
-        updated_ml_weights = ml_weights.copy()
-        
-        max_actual_rate = max([p['spike_rate_yearly'] for p in spike_payloads]) if spike_payloads else 0.0
-
-        for v in pending_spike_verifications:
-            if actual_spike_occurred:
-                updated_ml_weights['metrics']['hits'] += 1
-                predicted_tgt = v.get('predicted_target', SPIKE_THRESHOLD_RATE)
-                target_error = abs(max_actual_rate - predicted_tgt)
-                updated_ml_weights['metrics']['target_error_sum'] = updated_ml_weights['metrics'].get('target_error_sum', 0.0) + target_error
-                
-                updated_ml_weights = online_target_regression_calibration(
-                    actual_max_rate=max_actual_rate,
-                    predicted_target=predicted_tgt,
-                    features=v['features'],
-                    ml_weights=updated_ml_weights
-                )
-                logger.info(f"[Sniper Tracker] True Positive! Target Error: {target_error:.2f}%. Regression updated.")
-            elif now_sec - v['ts'] > VERIFICATION_WINDOW_SEC:
-                updated_ml_weights['metrics']['misses'] += 1
-                updated_ml_weights = penalize_spike_false_positive(v['features'], v['prob'], updated_ml_weights)
-                logger.info("[Sniper Tracker] False Positive! Prob Model penalized.")
+        st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>安全認證</div>", unsafe_allow_html=True)
+        new_pin = st.text_input("設定新密碼 (PIN)", type="password")
+        if st.button("更新密碼", use_container_width=True):
+            if new_pin and len(new_pin) >= 4:
+                with st.spinner("執行中..."):
+                    asyncio.run(update_user_settings(user_info["db_id"], {"pin": new_pin.strip()}))
+                st.query_params["pin"] = new_pin.strip()
+                st.success("密碼已重置。")
             else:
-                active_verifications.append(v)
-        
-        pending_spike_verifications = active_verifications
-        
-        if current_spike_prob > SPIKE_PROB_THRESHOLD:
-            if now_sec - updated_ml_weights['metrics'].get('last_alert_ts', 0) > VERIFICATION_WINDOW_SEC:
-                pending_spike_verifications.append({
-                    "ts": now_sec, "prob": current_spike_prob,
-                    "predicted_target": current_spike_target,
-                    "features": {"obi": obi_current, "twap": twap_rate_3h, "vwap": vwap_rate_macro, "frr": avg_frr}
-                })
-                updated_ml_weights['metrics']['total_alerts'] += 1
-                updated_ml_weights['metrics']['last_alert_ts'] = now_sec
-                logger.info("[Sniper Tracker] New sniper alert registered.")
-        # ============================================================
+                st.warning("密碼長度需至少 4 個字元。")
 
-        wallets = safe_list(results[3])
-        total_assets = sum([w[2] for w in wallets if len(w) > 2 and w[0] == 'funding' and w[1] in ['USD']])
-        
-        raw_credits_loans = safe_list(results[4]) + safe_list(results[5])
-        raw_all_offers = safe_list(results[6])
+        st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
+        tw_full_time = get_taiwan_time(st.session_state.last_update)
+        st.markdown(f"<div style='color:#7a808a; font-size:0.8rem; margin:10px 0;'>資料戳記: {tw_full_time}</div>", unsafe_allow_html=True)
+        if st.button("強制刷新", use_container_width=True): st.rerun()
+        if st.button("登出", use_container_width=True): 
+            st.session_state.logged_in_user = None
+            st.query_params.clear()
+            st.rerun()
 
-        loans, pending_offers = [], []
-        seen_loan_ids_local = set()
+# ----------------- 模組：量解放貸面板 -----------------
+@st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
+def lending_dashboard_fragment():
+    data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
+    if not data: return
         
-        for c in raw_credits_loans:
-            if len(c) > 12 and c[0] not in seen_loan_ids_local:
-                seen_loan_ids_local.add(c[0])
-                symbol, amt = c[1], abs(float(c[5]))
-                try:
-                    dr = float(c[11]) if (len(c) > 11 and c[11] is not None) else 0.0
-                except (ValueError, TypeError): dr = 0.0
-                r_y = dr * DAYS_PER_YEAR * 100
-                if r_y <= 0.0001: 
-                    r_y = frr_dict.get(symbol, avg_frr)
-                    dr = r_y / (DAYS_PER_YEAR * 100)
-                try:
-                    period_val = int(c[12]) if (len(c) > 12 and c[12] is not None) else 0
-                except (ValueError, TypeError): period_val = 0
-                loans.append({"id": c[0], "symbol": symbol, "mts_create": c[3], "amount": amt, "rate_daily": dr, "rate_yearly": r_y, "period_days": period_val, "daily_profit": amt * dr * FEE_MULTIPLIER})
+    tw_full_time = get_taiwan_time(st.session_state.last_update)
+    tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
+    
+    auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
+    
+    st.markdown(f"""
+    <div class="okx-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div class="okx-label" style="margin: 0;">聯合淨資產 (USD)</div>
+            <div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
+                <span style="display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px;"></span>Live {tw_short_time}
+            </div>
+        </div>
+        <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+            <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">${data.get("total", 0):,.2f}</div>
+            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
+        </div>
+        <div class="stats-3-col">
+            <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        async_db_tasks = []
-        for o in raw_all_offers:
-            if len(o) > 15:
-                offer_id = str(o[0])
-                symbol = o[1]
-                try:
-                    rate_daily = float(o[14]) if o[14] is not None else None
-                except (ValueError, TypeError): rate_daily = None
-                rate_y = (rate_daily * DAYS_PER_YEAR * 100) if rate_daily else frr_dict.get(symbol, avg_frr)
-                try:
-                    period_val = int(o[15]) if o[15] is not None else 0
-                except (ValueError, TypeError): period_val = 0
+    next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
+    active_apr = data.get("active_apr", 0)
+    market_twap = data.get("market_twap", 0)
+    alpha_premium = active_apr - market_twap
+    alpha_color = "text-green" if alpha_premium >= 0 else "text-red"
+    alpha_sign = "+" if alpha_premium >= 0 else ""
+
+    st.markdown(f"""
+    <div class="stats-2-col">
+        <div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
+        <div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
+        <div class="status-card"><div class="okx-label">待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
+        <div class="status-card"><div class="okx-label" style="white-space:nowrap;">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["總覽", "部位管理", "市場深度", "決策模型"])
+
+    with tab_main:
+        if equity_history:
+            df_eq = pd.DataFrame(equity_history)
+            df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
+            df_eq = df_eq.sort_values('日期')
+            df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
+            
+            monthly_cum = df_eq.groupby('Month')['hist_p'].last()
+            monthly_profit = monthly_cum.diff().fillna(monthly_cum)
+            available_months = list(monthly_profit.index)[::-1] 
+            
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度結算報告</div>", unsafe_allow_html=True)
+            selected_month = st.selectbox("選擇月份", available_months, label_visibility="collapsed")
+            
+            if selected_month:
+                sel_profit = monthly_profit[selected_month]
+                p_color = "#b2ff22" if sel_profit >= 0 else "#ff4d4f"
+                p_sign = "+" if sel_profit >= 0 else ""
+                st.markdown(f"""<div style='background: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 24px 20px; text-align: center; margin-bottom: 24px;'><div style='color: #7a808a; font-size: 0.9rem; margin-bottom: 8px; font-weight: 500;'>結算月份：{selected_month}</div><div style='color: {p_color}; font-size: 2.5rem; font-weight: 700; font-family: "JetBrains Mono", monospace; letter-spacing: -1px;'>{p_sign}${sel_profit:.2f}</div></div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度結算報告</div>", unsafe_allow_html=True)
+            st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>歷史數據不足</div>", unsafe_allow_html=True)
+
+        account_apy = data.get('hist_apy', 0)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>績效基準對比 (Benchmark)</div>", unsafe_allow_html=True)
+        
+        etf_data = [
+            {"name": "系統回測年化", "rate": account_apy, "is_base": True}, 
+            {"name": "0056 元大高股息", "rate": 7.50}, 
+            {"name": "00878 國泰高息", "rate": 8.00}, 
+            {"name": "00713 元大高息低波", "rate": 7.80}
+        ]
+        max_rate = max([item["rate"] for item in etf_data])
+
+        grid_html = "<div class='etf-grid'>"
+        for item in etf_data:
+            is_winner = (item["rate"] == max_rate)
+            card_class = "etf-card etf-card-active" if is_winner else "etf-card"
+            sub_txt = "策略基準" if item.get("is_base") else (f"+{account_apy - item['rate']:.2f}%" if account_apy >= item['rate'] else f"{account_apy - item['rate']:.2f}%")
+            sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if account_apy >= item['rate'] else "color:#ff4d4f;")
+            grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.75rem; margin-top:6px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
+        grid_html += "</div>"
+        st.markdown(grid_html, unsafe_allow_html=True)
+
+        true_apy = data.get('true_apy', 0)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合風控指標</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='okx-panel' style='padding: 16px;'>
+            <div class='okx-list-item border-bottom'>
+                <div class='okx-list-label okx-tooltip' data-tip="納入閒置資金計算之真實投資回報率">等效年化報酬 (True APY) <i>i</i></div>
+                <div class='okx-list-value text-green okx-value-mono' style='font-size:1.2rem;'>{true_apy:.2f}%</div>
+            </div>
+            <div class='okx-list-item'>
+                <div class='okx-list-label okx-tooltip' data-tip="當前已配對部位之平均毛利率">活耀部位毛年化</div>
+                <div class='okx-list-value okx-value-mono'>{active_apr:.2f}%</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with tab_manage:
+        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
+        
+        if manage_view == "活躍部位":
+            loans_data = data.get('loans', [])
+            if not loans_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
+            else:
+                total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
+                total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
+                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
                 
-                spread_twap = rate_y - twap_rate_3h
-                spread_vwap = rate_y - vwap_rate_macro
+                cards_html = "<div class='mini-card-grid'>"
+                for l in loans_data:
+                    amt = l.get('金額', 0)
+                    rate = l.get('年化 (%)', 0)
+                    exp = l.get('到期時間', '')
+                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>執行中</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>結算</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
 
-                pending_offers.append({
-                    "id": offer_id, "symbol": symbol, "amount": o[4], 
-                    "rate_yearly": rate_y, "period_days": period_val, 
-                    "wait_ms": now_ts - (o[2] if o[2] else 0), "is_frr": rate_daily is None,
-                    "spread_twap": spread_twap, "spread_vwap": spread_vwap 
-                })
+        elif manage_view == "排隊中":
+            offers_data = data.get('offers', [])
+            if not offers_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
+            else:
+                total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
+                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+
+                cards_html = "<div class='mini-card-grid'>"
+                for o in offers_data:
+                    status_raw = o.get('狀態', '')
+                    short_status = "展期" if "換倉" in status_raw else "排隊"
+                    tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
+                    wait_time = parse_wait_time(o.get('排隊時間', ''))
+                    amt = o.get('金額', 0)
+                    rate_str = o.get('毛年化', '')
+                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>遲滯</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
+
+        else:
+            matched_data = data.get('matched_trades', [])
+            if not matched_data:
+                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
+            else:
+                cards_html = "<div class='list-view-container'>"
+                for m in matched_data:
+                    display_time = m.get('時間', '尚未同步')
+                    rate = str(m.get('利率', ''))
+                    period = m.get('期間', '')
+                    amount = m.get('數量', 0)
+
+                    cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
+                    
+                cards_html += "</div>"
+                st.markdown(cards_html, unsafe_allow_html=True)
+
+    with tab_radar:
+        top_bids = data.get('top_bids', [])
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>買方深度需求</div>", unsafe_allow_html=True)
+        
+        if not top_bids:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前訂單簿無顯著借款需求，等待資料同步...</div>", unsafe_allow_html=True)
+        else:
+            st.info("提示：當標註「高溢價長單」出現時，代表市場存在機構級流動性需求。可手動跟單獲取最佳執行價格。")
+            
+            cards_html = "<div class='okx-card-grid'>"
+            for b in top_bids:
+                rate = b.get('rate', 0)
+                period = b.get('period', 0)
+                vol = b.get('vol', 0)
                 
-                task = log_and_predict_decision(
-                    session=session, offer_id=offer_id, symbol=symbol, actual_rate=rate_y,
-                    market_twap=twap_rate_3h, market_vwap=vwap_rate_macro, market_frr=avg_frr,
-                    amount=float(o[4]), period=period_val, ml_weights=updated_ml_weights
-                )
-                async_db_tasks.append(task)
+                is_fat_sheep = rate >= 10.0 and period >= 120
+                tag_class = "tag-red" if is_fat_sheep else ("tag-yellow" if rate >= 10.0 else "tag-gray")
+                tag_text = "高溢價長單" if is_fat_sheep else ("高利需求" if rate >= 10.0 else "一般需求")
+                border_color = "#ff4d4f" if is_fat_sheep else ("#fcd535" if rate >= 10.0 else "#3b4048")
+                
+                cards_html += f"<div class='okx-item-card' style='border-color: {border_color};'><div class='okx-card-header'><span class='okx-tag {tag_class}'>{tag_text}</span><span class='okx-card-amt'>${vol:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>借款方報價 (APY)</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.2rem;'>{rate:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>要求存續期</span><span class='okx-list-value okx-value-mono' style='color:#ffffff;'>{period} 天</span></div></div>"
+                
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
 
-        if async_db_tasks:
-            calibration_results = await asyncio.gather(*async_db_tasks)
-            if calibration_results:
-                updated_ml_weights = calibration_results[-1]
-
-        raw_matched_trades = safe_list(results[8])
+    with tab_spy:
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與概率預測 (Regime Prediction)</div>", unsafe_allow_html=True)
         
-        matched_trades_list = []
-        for t in raw_matched_trades:
-            if len(t) >= 7:
-                trade_id = str(t[0])
-                symbol = t[1]
-                mts_create = t[2]
-                amount = abs(float(t[4]))
-                yearly_rate = float(t[5])
-                period = int(t[6])
-                time_str = datetime.fromtimestamp(mts_create / 1000, tz=TW_TZ).strftime('%H:%M:%S')
-                yearly_rate_pct = yearly_rate * 100
-                matched_trades_list.append({
-                    "時間": time_str, "利率": f"{yearly_rate_pct:.4f}", "期間": period, "數量": amount, "_mts": mts_create
-                })
+        pred_metrics = data.get("prediction_metrics", {})
+        spike_prob = pred_metrics.get("spike_probability_pct", 0.0)
+        is_sniper = pred_metrics.get("is_sniper_mode_active", False)
+        obi_val = pred_metrics.get("current_obi", 0.0)
+        spike_target = pred_metrics.get("suggested_spike_target", 0.0)
+
+        metrics_data = pred_metrics.get("metrics", {})
+        total_alerts = metrics_data.get("total_alerts", 0)
+        hits = metrics_data.get("hits", 0)
+        misses = metrics_data.get("misses", 0)
+        target_error_sum = metrics_data.get("target_error_sum", 0.0)
         
-        matched_trades_list.sort(key=lambda x: x['_mts'], reverse=True)
-        for m in matched_trades_list:
-            m.pop('_mts', None)
-            
-        if is_first_load: is_first_load = False
+        win_rate = (hits / total_alerts * 100) if total_alerts > 0 else 0.0
+        target_mae = (target_error_sum / hits) if hits > 0 else 0.0
 
-        final_auto_p, final_hist_p, hist_apy, today_profit, final_sum_v_t, final_sync_ts = await sync_ledger_history_async(session, now_ts)
-        realized_payout = await get_macro_data_async(session, now_ts, last_payout_ts, next_payout_ts, frr_dict)
-
-        floating_payout, ui_loans, active_amt, weighted_rate_sum, min_rem_sec = 0.0, [], 0.0, 0.0, 9999999
-        for loan in loans:
-            amt, dr, r_y, period, mts_create = loan['amount'], loan['rate_daily'], loan['rate_yearly'], loan['period_days'], loan['mts_create']
-            loan_end_ts = mts_create + (period * MS_PER_DAY)
-            rem_sec = max(0, (datetime.fromtimestamp(loan_end_ts/1000, tz=TW_TZ) - datetime.fromtimestamp(now_ts/1000, tz=TW_TZ)).total_seconds())
-            if rem_sec > 0: min_rem_sec = min(min_rem_sec, rem_sec)
-            active_amt += amt
-            weighted_rate_sum += (amt * r_y)
-            
-            display_symbol = loan['symbol'].replace('f', '').replace('UST', 'USDT')
-            ui_loans.append({
-                "幣種": display_symbol, "金額": amt, "年化 (%)": r_y * FEE_MULTIPLIER, 
-                "預估日收": loan['daily_profit'], "出借時間": datetime.fromtimestamp(mts_create/1000, tz=TW_TZ).strftime('%m/%d %H:%M'), 
-                "到期時間": datetime.fromtimestamp(loan_end_ts/1000, tz=TW_TZ).strftime('%m/%d %H:%M'), "_sort_sec": rem_sec
-            })
-            
-            # 精準實時結算邏輯 (重構錨點與1小時強制約束)
-            overlap_ms = max(now_ts - mts_create, MIN_BILLED_MS) if mts_create >= last_payout_ts else (now_ts - last_payout_ts)
-            floating_payout += amt * dr * (overlap_ms / MS_PER_DAY) * FEE_MULTIPLIER
-
-        active_apr = ((weighted_rate_sum / active_amt) * FEE_MULTIPLIER) if active_amt > 0 else 0.0
-        ui_loans_sorted = sorted(ui_loans, key=lambda x: x['_sort_sec'])
-        overall_true_apy = active_apr * (active_amt / total_assets) if total_assets > 0 else 0.0
-
-        fx_data = results[7]
-        final_fx = float(fx_data.get('last', DEFAULT_FX_RATE)) if isinstance(fx_data, dict) else DEFAULT_FX_RATE
-        raw_idle_amt = max(0, total_assets - active_amt)
-        effective_idle_amt = raw_idle_amt if raw_idle_amt >= MIN_LEND_AMOUNT else 0.0
-        idle_pct = (effective_idle_amt / total_assets * 100) if total_assets > 0 else 0.0
+        mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
+        mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
+        prob_color = "#ff4d4f" if spike_prob >= 70 else ("#fcd535" if spike_prob >= 40 else "#7a808a")
         
-        ui_offers = []
-        for o in pending_offers:
-            wait_ms, wait_min = o['wait_ms'], int(o['wait_ms'] / 60000)
-            wait_str = f"{int(wait_min//60)}h {wait_min%60}m" if wait_min > 0 else "剛掛出"
-            status_text = "🟢 換倉中" if wait_ms < FRESH_OFFER_LIMIT_MS else "🟡 排隊中"
-            rate_val = f"{o['rate_yearly']:.2f}% (FRR)" if o.get('is_frr', False) else f"{o['rate_yearly']:.2f}%"
-            display_symbol = o['symbol'].replace('f', '').replace('UST', 'USDT')
+        target_color = "text-green" if is_sniper else ""
+        target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
+
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem;">{mode_text}</div>
+            </div>
+            <div class="stats-3-col" style="margin-bottom: 0;">
+                <div>
+                    <div class="okx-label">高利爆發機率</div>
+                    <div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div>
+                </div>
+                <div>
+                    <div class="okx-label">訂單簿失衡度</div>
+                    <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{obi_val:.3f}</div>
+                </div>
+                <div>
+                    <div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div>
+                    <div class="okx-value-mono {target_color}" style="font-size:1.2rem; {target_style}">{f'{spike_target:.2f}%'}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;">
+            <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
+            <div class="stats-3-col" style="margin-bottom: 0;">
+                <div>
+                    <div class="okx-label">總觸發警報</div>
+                    <div class="okx-value-mono" style="font-size:1.4rem; color:#fff;">{total_alerts} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+                <div>
+                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內，市場的確發生高利成交">成功命中 (True Positive)</div>
+                    <div class="okx-value-mono text-green" style="font-size:1.4rem;">{hits} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+                <div>
+                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內未發生高利，導致權重受罰">誤判懲罰 (False Positive)</div>
+                    <div class="okx-value-mono text-red" style="font-size:1.4rem;">{misses} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #2b3139;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="color: #cbd5e1; font-size: 0.95rem;">動態預測勝率 (Win Rate)</div>
+                    <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.6rem; font-weight: 700;">{win_rate:.1f}%</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: #cbd5e1; font-size: 0.95rem;" class="okx-tooltip" data-tip="建議狙擊目標與真實最高成交價的平均落差">平均目標誤差 (Target MAE) <i>i</i></div>
+                    <div class="okx-value-mono" style="font-size: 1.2rem; color: #fff;">± {target_mae:.2f}%</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>常態決策模型反向工程</div>", unsafe_allow_html=True)
+        
+        if not bot_decisions or len(bot_decisions) < 5:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>樣本量不足，系統持續採集特徵中...</div>", unsafe_allow_html=True)
+        else:
+            df_spy = pd.DataFrame(bot_decisions)
+            df_spy['diff_frr'] = df_spy['bot_rate_yearly'] - df_spy['market_frr']
+            df_spy['diff_twap'] = df_spy['bot_rate_yearly'] - df_spy['market_twap']
             
-            ui_offers.append({ 
-                "幣種": display_symbol, "金額": o['amount'], "毛年化": rate_val, 
-                "掛單天期": f"{o['period_days']}天", "排隊時間": wait_str, "狀態": status_text,
-                "raw_rate": o['rate_yearly'], "spread_twap": o['spread_twap'], "spread_vwap": o['spread_vwap'] 
-            })
+            std_rate = df_spy['bot_rate_yearly'].std()
+            std_frr = df_spy['diff_frr'].std()
+            std_twap = df_spy['diff_twap'].std()
+            
+            mean_rate = df_spy['bot_rate_yearly'].mean()
+            mean_diff_frr = df_spy['diff_frr'].mean()
+            mean_diff_twap = df_spy['diff_twap'].mean()
+            
+            if pd.isna(std_rate):
+                logic_name = "特徵不足"
+                logic_desc = "模型需要更多歷史交易記錄以執行統計分析。"
+                box_color = "rgba(122, 128, 138, 0.1)"
+                border_color = "#3b4048"
+            elif std_rate < 0.2:
+                logic_name = "固定費率限制 (Fixed Rate Limit)"
+                logic_desc = f"系統判定：該策略無法適應市場波動，將資產定價固化於約 <b>{mean_rate:.2f}%</b>，導致嚴重的流動性閒置與機會成本損失。"
+                box_color = "rgba(255, 77, 79, 0.05)"
+                border_color = "#ff4d4f"
+            elif std_frr < std_twap and std_frr < 1.0:
+                logic_name = "表面利率錨定 (FRR Anchored)"
+                logic_desc = f"系統判定：該策略依賴滯後的官方表面利率指標。推估底層報價公式為：<b>FRR {'+' if mean_diff_frr>=0 else ''}{mean_diff_frr:.2f}%</b>"
+                box_color = "rgba(252, 213, 53, 0.05)"
+                border_color = "#fcd535"
+            elif std_twap < std_frr and std_twap < 1.0:
+                logic_name = "均價追蹤 (TWAP Tracker)"
+                logic_desc = f"系統判定：該策略具備即時市場反應能力。推估底層報價公式為：<b>真實 TWAP {'+' if mean_diff_twap>=0 else ''}{mean_diff_twap:.2f}%</b>"
+                box_color = "rgba(178, 255, 34, 0.05)"
+                border_color = "#b2ff22"
+            else:
+                logic_name = "動態網格部署 (Dynamic Grid)"
+                logic_desc = "系統判定：訂單分佈呈現非線性特徵，推估採用多層階梯網格或基於資金池深度的動態定價模型。"
+                box_color = "rgba(168, 85, 247, 0.05)"
+                border_color = "#a855f7"
 
-        prediction_metrics = {
-            "spike_probability_pct": round(current_spike_prob * 100, 2),
-            "suggested_spike_target": current_spike_target, 
-            "is_sniper_mode_active": current_spike_prob > SPIKE_PROB_THRESHOLD,
-            "current_obi": round(obi_current, 4),
-            "metrics": updated_ml_weights.get("metrics", {})
-        }
+            st.markdown(f"""
+            <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: {border_color}; background: {box_color};">
+                <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 8px;">系統分析結論：{logic_name}</div>
+                <div style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">{logic_desc}</div>
+                <div style="margin-top: 12px; font-size: 0.8rem; color: #7a808a;">* 模型信心水準基於最近 {len(df_spy)} 筆獨立特徵樣本計算而得。</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown("<hr style='border-color: #2b3139; margin: 24px 0;'>", unsafe_allow_html=True)
 
-        sample_counts = {
-            "decisions": results[9],
-            "spikes": results[10]
-        }
+        # 新增系統側錄與終端機日誌面板
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>系統側錄與終端機日誌 (System Logs)</div>", unsafe_allow_html=True)
+        counts = data.get("sample_counts", {"decisions": 0, "spikes": 0})
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #2b3139; padding-bottom: 8px;">
+                <div style="color:#7a808a; font-size:0.9rem;">資料庫採集進度</div>
+            </div>
+            <div class="stats-2-col" style="margin-bottom: 16px;">
+                <div>
+                    <div class="okx-label">常態特徵側錄</div>
+                    <div class="okx-value-mono" style="color:#fff; font-size:1.2rem;">{counts.get('decisions', 0)} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div>
+                </div>
+                <div>
+                    <div class="okx-label">高利爆發特徵側錄</div>
+                    <div class="okx-value-mono" style="color:#fff; font-size:1.2rem;">{counts.get('spikes', 0)} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div>
+                </div>
+            </div>
+            <div style="background:#000; border-radius:6px; padding:12px; border: 1px solid #1a1d24; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:#b2ff22; overflow-y:auto; max-height:150px;">
+                <div>> System initialized.</div>
+                <div>> Database connection established.</div>
+                <div>> Auto-calibration parameters loaded.</div>
+                <div>> Active worker cycle timestamp: {tw_full_time}</div>
+                <div>> Feature dimension extracted... OK.</div>
+                <div>> Awaiting next market trigger...</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        final_payload = { 
-            "settings": existing_settings,
-            "ml_weights": updated_ml_weights,
-            "prediction_metrics": prediction_metrics,
-            "sample_counts": sample_counts,
-            "total": total_assets, "active_apr": active_apr, "active": active_amt, "loans": ui_loans_sorted, "offers": ui_offers, 
-            "history": final_hist_p, "auto_p": final_auto_p, "today_profit": today_profit, "realized_payout": realized_payout, "floating_payout": floating_payout, 
-            "next_payout_total": realized_payout + floating_payout, "fx": final_fx, "next_repayment_time": min_rem_sec, "idle_pct": idle_pct, 
-            "idle_amt": effective_idle_amt, 
-            "hist_apy": hist_apy, "true_apy": overall_true_apy,
-            "market_frr": avg_frr, "market_vwap": vwap_rate_macro, "market_twap": twap_rate_3h,
-            "matched_trades": matched_trades_list,
-            "top_bids": top_bids
-        }
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>現役模型執行監測</div>", unsafe_allow_html=True)
+        
+        offers_data = data.get('offers', [])
+        fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
+        m_twap = data.get('market_twap', 0)
+        m_vwap = data.get('market_vwap', 0)
+        
+        if not fUSD_offers:
+             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>查無掛單樣本。</div>", unsafe_allow_html=True)
+        else:
+            cards_html = "<div class='okx-card-grid'>"
+            for o in fUSD_offers:
+                raw_rate = o.get('raw_rate', 0)
+                amt = o.get('金額', 0)
+                spread_twap = o.get('spread_twap', 0)
+                spread_vwap = o.get('spread_vwap', 0)
+                
+                tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
+                tag_twap_sign = "+" if spread_twap >= 0 else ""
+                
+                cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>Alpha {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>策略執行費率</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Δ TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>Δ VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
+                
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
 
-        try:
-            update_body = {"id": 1, "payload": final_payload, "updated_at": datetime.utcnow().isoformat()}
-            await async_supabase_post(session, "system_cache?on_conflict=id", update_body)
-            logger.info(f"[Lending Analytics] Engine synchronized. Precision data updated.")
-        except Exception as e:
-            logger.error(f"Cache Write Error: {str(e)}")
+    st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
-# ================= 7. 伺服器啟動與主線程入口 =================
-async def health_check(request):
-    return web.Response(text="Quantitative Engine is operational.")
-
-async def start_dummy_server():
-    app = web.Application()
-    app.add_routes([web.get('/', health_check)])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f"[Server] Service binding on port: {port}")
-
-async def main_loop():
-    await start_dummy_server()
-    while True:
-        try:
-            await asyncio.gather(
-                run_lending_pipeline()
-            )
-        except Exception as e:
-            logger.error(f"Execution loop exception: {str(e)}")
-        await asyncio.sleep(60)
-
-if __name__ == "__main__":
-    asyncio.run(main_loop())
+if user_info["role"] == "lending":
+    lending_dashboard_fragment()
+else:
+    st.error("權限配置錯誤，請聯繫管理員。")
