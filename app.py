@@ -499,7 +499,7 @@ def lending_dashboard_fragment():
             <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
             <div class="stats-3-col" style="margin-bottom: 0;">
                 <div>
-                    <div class="okx-label">總觸發警報</div>
+                    <div class="okx-label">總觸發</div>
                     <div class="okx-value-mono" style="font-size:1.4rem; color:#fff;">{total_alerts} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
                 </div>
                 <div>
