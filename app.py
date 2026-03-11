@@ -280,7 +280,7 @@ def lending_dashboard_fragment():
         </div>
         <div class="stats-3-col">
             <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">當日收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
+            <div><div class="okx-label" style="white-space:nowrap;">當日預估收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
             <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
         </div>
     </div>
@@ -460,12 +460,15 @@ def lending_dashboard_fragment():
         obi_val = pred_metrics.get("current_obi", 0.0)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
 
-        # 讀取準確率計分板
+        # 讀取準確率與 MAE 計分板
         metrics_data = pred_metrics.get("metrics", {})
         total_alerts = metrics_data.get("total_alerts", 0)
         hits = metrics_data.get("hits", 0)
         misses = metrics_data.get("misses", 0)
+        target_error_sum = metrics_data.get("target_error_sum", 0.0)
+        
         win_rate = (hits / total_alerts * 100) if total_alerts > 0 else 0.0
+        target_mae = (target_error_sum / hits) if hits > 0 else 0.0
 
         mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
         mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
@@ -493,13 +496,12 @@ def lending_dashboard_fragment():
         </div>
         """, unsafe_allow_html=True)
 
-        # ----------------- 新增：主動狙擊模型準確率面板 -----------------
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;">
             <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
             <div class="stats-3-col" style="margin-bottom: 0;">
                 <div>
-                    <div class="okx-label">總觸發</div>
+                    <div class="okx-label">總觸發警報</div>
                     <div class="okx-value-mono" style="font-size:1.4rem; color:#fff;">{total_alerts} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
                 </div>
                 <div>
@@ -511,9 +513,15 @@ def lending_dashboard_fragment():
                     <div class="okx-value-mono text-red" style="font-size:1.4rem;">{misses} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
                 </div>
             </div>
-            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #2b3139; display: flex; justify-content: space-between; align-items: center;">
-                <div style="color: #cbd5e1; font-size: 0.95rem;">動態預測勝率 (Win Rate)</div>
-                <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.6rem; font-weight: 700;">{win_rate:.1f}%</div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #2b3139;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="color: #cbd5e1; font-size: 0.95rem;">動態預測勝率 (Win Rate)</div>
+                    <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.6rem; font-weight: 700;">{win_rate:.1f}%</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: #cbd5e1; font-size: 0.95rem;" class="okx-tooltip" data-tip="建議狙擊目標與真實最高成交價的平均落差">平均目標誤差 (Target MAE) <i>i</i></div>
+                    <div class="okx-value-mono" style="font-size: 1.2rem; color: #fff;">± {target_mae:.2f}%</div>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -602,91 +610,6 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     # 實體隱形墊片
-    st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
-
-# ----------------- 模組 B：DOT 淨本金面板 -----------------
-@st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
-def staking_dashboard_fragment():
-    global user_data
-    if not user_data: 
-        st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>請先至設定寫入 API 金鑰，以擷取特徵資料。</div>", unsafe_allow_html=True)
-        return
-        
-    tw_full_time = get_taiwan_time(st.session_state.last_update)
-    tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
-    
-    settings = user_data.get("settings", {})
-    user_apy = float(settings.get("apy", 15.0))
-
-    dot_balance = user_data.get("dot_balance", 0.0)
-    dot_price = user_data.get("dot_price_usd", 0.0)
-    usd_twd_fx = user_data.get("fx", 32.0)
-    
-    total_rewards_dot = user_data.get("total_rewards_dot", 0.0)
-    principal_dot = user_data.get("principal_dot", 0.0)
-    
-    total_usd = dot_balance * dot_price
-    total_twd = total_usd * usd_twd_fx
-    
-    rewards_usd = total_rewards_dot * dot_price
-    rewards_twd = rewards_usd * usd_twd_fx
-
-    daily_reward_dot = dot_balance * (user_apy / 100) / 365
-    daily_reward_usd = daily_reward_dot * dot_price
-    daily_reward_twd = daily_reward_usd * usd_twd_fx
-
-    if dot_balance == 0 and not settings.get('api_key'):
-        st.info("提示：寫入 API 金鑰以啟用節點追蹤。")
-        return
-
-    st.markdown(f"""
-    <div class="okx-panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div class="okx-label" style="margin: 0;">綜合資產現值 (DOT)</div>
-            <div style="color:#e6007a; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
-                <span style="display:inline-block; width:6px; height:6px; background-color:#e6007a; border-radius:50%; margin-right:4px;"></span>Live {tw_short_time}
-            </div>
-        </div>
-        <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
-            <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">{dot_balance:,.2f}</div>
-            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ ${total_usd:,.2f} USD</div>
-        </div>
-        <div class="stats-3-col" style="margin-top:0;">
-            <div><div class="okx-label" style="white-space:nowrap;">淨投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{principal_dot:,.2f} <span style="font-size:0.75rem; color:#7a808a;">DOT</span></div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+{total_rewards_dot:,.4f} <span style="font-size:0.75rem; color:#7a808a;">DOT</span></div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">法定貨幣換算</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">≈ {int(total_twd):,}</div></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>質押績效與匯率</div>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="stats-2-col">
-        <div class="status-card"><div class="okx-label">預期報酬率 (APY)</div><div class="okx-value-mono text-green" style="font-size:1.4rem;">{user_apy:.1f}%</div></div>
-        <div class="status-card"><div class="okx-label okx-tooltip" data-tip="依據模型參數推算之日平均收益">預期日現金流 <i>i</i></div><div class="okx-value-mono text-green" style="font-size:1.4rem;">+{daily_reward_dot:.4f}</div></div>
-        <div class="status-card"><div class="okx-label">DOT / USD 報價</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${dot_price:.4f}</div></div>
-        <div class="status-card"><div class="okx-label">USD / TWD 報價</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{usd_twd_fx:.2f}</div></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>收益累積明細</div>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='okx-panel' style='padding: 16px;'>
-        <div class='okx-list-item border-bottom'>
-            <div class='okx-list-label'>累計孳息 (DOT)</div>
-            <div class='okx-list-value text-green okx-value-mono' style='font-size:1.3rem;'>+{total_rewards_dot:,.4f}</div>
-        </div>
-        <div class='okx-list-item border-bottom'>
-            <div class='okx-list-label'>美元等值估值 (USD)</div>
-            <div class='okx-list-value okx-value-mono'>+${rewards_usd:,.2f}</div>
-        </div>
-        <div class='okx-list-item'>
-            <div class='okx-list-label'>法幣等值估值 (TWD)</div>
-            <div class='okx-list-value okx-value-mono'>+ NT$ {int(rewards_twd):,}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
     st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
 # 路由判斷
