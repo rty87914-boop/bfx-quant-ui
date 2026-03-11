@@ -20,7 +20,7 @@ if 'last_update' not in st.session_state: st.session_state.last_update = "尚未
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
 # ================= 2. 視覺風格定義與 JS 腳本注入 =================
-_ = st.components.v1.html("""<script>
+st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
         doc.documentElement.style.background = '#000000';
@@ -71,16 +71,16 @@ async def fetch_cached_data(session, db_id) -> dict:
     return {}
 
 async def fetch_all_auth_data() -> dict:
+    # 修改：移除 DOT 投資人帳號
     default_users = {
-        "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1},
-        "friend": {"pin": "5678", "name": "DOT 投資人", "role": "staking", "db_id": 2}
+        "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1}
     }
     if not SUPABASE_URL: return default_users
     
     async with aiohttp.ClientSession() as session:
-        r1, r2 = await asyncio.gather(fetch_cached_data(session, 1), fetch_cached_data(session, 2))
+        # 修改：僅讀取 lending 資料
+        r1 = await fetch_cached_data(session, 1)
         if r1.get('settings', {}).get('pin'): default_users["mingyu"]["pin"] = str(r1['settings']['pin'])
-        if r2.get('settings', {}).get('pin'): default_users["friend"]["pin"] = str(r2['settings']['pin'])
         return default_users
 
 async def update_user_settings(db_id: int, new_settings: dict):
@@ -122,10 +122,6 @@ async def fetch_bot_decisions(session) -> list:
 async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
         return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session), fetch_bot_decisions(session))
-
-async def fetch_all_data_staking():
-    async with aiohttp.ClientSession() as session:
-        return await fetch_cached_data(session, 2)
 
 def format_time_smart(seconds):
     if not seconds or seconds >= 9999999: return "--"
@@ -179,11 +175,13 @@ if st.session_state.logged_in_user is None:
             pin_input = st.text_input("輸入密碼 (PIN)", type="password")
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("登入系統", use_container_width=True, type="primary"):
-                if USERS[selected_user]["pin"] == pin_input:
+                if pin_input and USERS[selected_user]["pin"] == pin_input:
                     st.session_state.logged_in_user = selected_user
                     st.query_params["user"] = selected_user
                     st.query_params["pin"] = pin_input
                     st.rerun()
+                elif not pin_input:
+                    st.warning("請輸入密碼。")
                 else:
                     st.error("密碼錯誤，請重試。")
     st.stop()
@@ -195,11 +193,6 @@ try:
 except FileNotFoundError: pass
 
 user_info = USERS[st.session_state.logged_in_user]
-
-if user_info["role"] == "staking":
-    user_data = asyncio.run(fetch_all_data_staking())
-else:
-    user_data = {}
 
 # ================= 6. UI 渲染邏輯 =================
 st.columns(1) 
@@ -214,24 +207,7 @@ with c_btn:
         
         st.info("提示：目前網址已包含驗證參數，建議加入書籤以利免密碼登入。")
         
-        if user_info["role"] == "staking":
-            st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
-            st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>API 與策略參數</div>", unsafe_allow_html=True)
-            
-            saved_settings = user_data.get('settings', {})
-            new_apy = st.number_input("預期 APY (%)", value=float(saved_settings.get('apy', 15.0)), step=0.5, format="%.2f")
-            new_key = st.text_input("API Key", value=saved_settings.get('api_key', ''), type="password")
-            new_secret = st.text_input("API Secret", value=saved_settings.get('api_secret', ''), type="password")
-            
-            if st.button("寫入設定", use_container_width=True, type="primary"):
-                with st.spinner("同步至資料庫..."):
-                    asyncio.run(update_user_settings(user_info["db_id"], {
-                        "apy": new_apy,
-                        "api_key": new_key.strip(),
-                        "api_secret": new_secret.strip()
-                    }))
-                st.success("參數已更新，下次回圈生效。")
-                st.rerun()
+        # 修改：移除針對 role == "staking" 的 API 設定介面
 
         st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>安全認證</div>", unsafe_allow_html=True)
@@ -254,7 +230,7 @@ with c_btn:
             st.query_params.clear()
             st.rerun()
 
-# ----------------- 模組 A：量解放貸面板 -----------------
+# ----------------- 模組：量解放貸面板 -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
     data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
@@ -372,13 +348,13 @@ def lending_dashboard_fragment():
             if not loans_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
             else:
-                total_loan_amt = sum(l.get('金額', l.get('金額 (USD)', 0)) for l in loans_data)
+                total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
                 total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
                 st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
                 
                 cards_html = "<div class='mini-card-grid'>"
                 for l in loans_data:
-                    amt = l.get('金額', l.get('金額 (USD)', 0))
+                    amt = l.get('金額', 0)
                     rate = l.get('年化 (%)', 0)
                     exp = l.get('到期時間', '')
                     cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>執行中</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>結算</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
@@ -390,7 +366,7 @@ def lending_dashboard_fragment():
             if not offers_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
             else:
-                total_offer_amt = sum(o.get('金額', o.get('金額 (USD)', 0)) for o in offers_data)
+                total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
                 st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
 
                 cards_html = "<div class='mini-card-grid'>"
@@ -399,7 +375,7 @@ def lending_dashboard_fragment():
                     short_status = "展期" if "換倉" in status_raw else "排隊"
                     tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
                     wait_time = parse_wait_time(o.get('排隊時間', ''))
-                    amt = o.get('金額', o.get('金額 (USD)', 0))
+                    amt = o.get('金額', 0)
                     rate_str = o.get('毛年化', '')
                     cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>遲滯</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
                 cards_html += "</div>"
@@ -412,14 +388,10 @@ def lending_dashboard_fragment():
             else:
                 cards_html = "<div class='list-view-container'>"
                 for m in matched_data:
-                    raw_time = m.get('created_at', m.get('時間', m.get('time', m.get('match_time', '尚未同步'))))
-                    display_time = get_taiwan_time(raw_time) if raw_time else '--/-- --:--'
-                    
-                    rate = str(m.get('利率', m.get('rate', '')))
-                    if "%" not in rate and rate.replace('.', '', 1).isdigit(): rate = f"{float(rate):.4f}%"
-                    
-                    period = m.get('期間', m.get('period', ''))
-                    amount = m.get('數量', m.get('amount', 0))
+                    display_time = m.get('時間', '尚未同步')
+                    rate = str(m.get('利率', ''))
+                    period = m.get('期間', '')
+                    amount = m.get('數量', 0)
 
                     cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
                     
@@ -617,7 +589,8 @@ def lending_dashboard_fragment():
     st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
 # 路由判斷
+# 修改：僅保留 lending 路由，移除 staking 相關判斷
 if user_info["role"] == "lending":
     lending_dashboard_fragment()
-elif user_info["role"] == "staking":
-    staking_dashboard_fragment()
+else:
+    st.error("權限配置錯誤，請聯繫管理員。")
