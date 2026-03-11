@@ -269,7 +269,7 @@ def lending_dashboard_fragment():
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div class="okx-label" style="margin: 0;">聯合淨資產 (USD/USDT)</div>
+            <div class="okx-label" style="margin: 0;">聯合淨資產 (USD)</div>
             <div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center;">
                 <span style="display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px;"></span>Live {tw_short_time}
             </div>
@@ -452,7 +452,6 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_spy:
-        # ----------------- 新增：機器學習預測與高利雷達狀態 -----------------
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與概率預測 (Regime Prediction)</div>", unsafe_allow_html=True)
         
         pred_metrics = data.get("prediction_metrics", {})
@@ -460,6 +459,13 @@ def lending_dashboard_fragment():
         is_sniper = pred_metrics.get("is_sniper_mode_active", False)
         obi_val = pred_metrics.get("current_obi", 0.0)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
+
+        # 讀取準確率計分板
+        metrics_data = pred_metrics.get("metrics", {})
+        total_alerts = metrics_data.get("total_alerts", 0)
+        hits = metrics_data.get("hits", 0)
+        misses = metrics_data.get("misses", 0)
+        win_rate = (hits / total_alerts * 100) if total_alerts > 0 else 0.0
 
         mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
         mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
@@ -470,19 +476,44 @@ def lending_dashboard_fragment():
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem;">{mode_text}</div>
             </div>
-            <div class="stats-2-col" style="margin-bottom: 0;">
+            <div class="stats-3-col" style="margin-bottom: 0;">
                 <div>
-                    <div class="okx-label">高利爆發機率 ($P_{{spike}}$)</div>
+                    <div class="okx-label">高利爆發機率</div>
                     <div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div>
                 </div>
                 <div>
-                    <div class="okx-label">訂單簿失衡度 (OBI)</div>
+                    <div class="okx-label">訂單簿失衡度</div>
                     <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{obi_val:.3f}</div>
                 </div>
                 <div>
                     <div class="okx-label">建議狙擊目標</div>
                     <div class="okx-value-mono text-green" style="font-size:1.2rem;">{f'{spike_target:.2f}%' if spike_target > 0 else '--'}</div>
                 </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ----------------- 新增：主動狙擊模型準確率面板 -----------------
+        st.markdown(f"""
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;">
+            <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
+            <div class="stats-3-col" style="margin-bottom: 0;">
+                <div>
+                    <div class="okx-label">總觸發警報</div>
+                    <div class="okx-value-mono" style="font-size:1.4rem; color:#fff;">{total_alerts} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+                <div>
+                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內，市場的確發生高利成交">成功命中 (True Positive)</div>
+                    <div class="okx-value-mono text-green" style="font-size:1.4rem;">{hits} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+                <div>
+                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內未發生高利，導致權重受罰">誤判懲罰 (False Positive)</div>
+                    <div class="okx-value-mono text-red" style="font-size:1.4rem;">{misses} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #2b3139; display: flex; justify-content: space-between; align-items: center;">
+                <div style="color: #cbd5e1; font-size: 0.95rem;">動態預測勝率 (Win Rate)</div>
+                <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.6rem; font-weight: 700;">{win_rate:.1f}%</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
