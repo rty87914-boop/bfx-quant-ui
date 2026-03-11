@@ -22,7 +22,6 @@ if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = N
 # ================= 2. 視覺風格定義與 JS/CSS 腳本注入 =================
 st.markdown("""
 <style>
-/* 解決 Tooltip 超出螢幕邊界限制 */
 .okx-tooltip { position: relative; cursor: help; border-bottom: 1px dashed #7a808a; }
 .okx-tooltip:hover::after {
     content: attr(data-tip);
@@ -276,7 +275,7 @@ def lending_dashboard_fragment():
             <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">${data.get("total", 0):,.2f}</div>
             <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
         </div>
-        <div class="stats-3-col">
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between;">
             <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
             <div><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
             <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
@@ -292,11 +291,11 @@ def lending_dashboard_fragment():
     alpha_sign = "+" if alpha_premium >= 0 else ""
 
     st.markdown(f"""
-    <div class="stats-2-col">
-        <div class="status-card"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
-        <div class="status-card"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
-        <div class="status-card"><div class="okx-label">待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
-        <div class="status-card"><div class="okx-label" style="white-space:nowrap;">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -362,7 +361,7 @@ def lending_dashboard_fragment():
         """, unsafe_allow_html=True)
 
     with tab_manage:
-        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
+        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配驚"], label_visibility="collapsed")
         
         if manage_view == "活躍部位":
             loans_data = data.get('loans', [])
@@ -371,7 +370,14 @@ def lending_dashboard_fragment():
             else:
                 total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
                 total_daily_profit = sum(l.get('預估日收', 0) for l in loans_data)
-                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div><div class="status-card"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div><div class="status-card"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div><div class="status-card"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; margin-bottom: 16px;">
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">鎖定總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_loan_amt:,.0f}</div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">合約數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(loans_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">加權均率</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">{data.get("active_apr", 0):.2f}%</div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">日現金流</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">${total_daily_profit:.2f}</div></div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 cards_html = "<div class='mini-card-grid'>"
                 for l in loans_data:
@@ -388,7 +394,12 @@ def lending_dashboard_fragment():
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
             else:
                 total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
-                st.markdown(f"""<div class="stats-2-col" style="margin-top:4px;"><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div><div class="status-card"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; margin-bottom: 16px;">
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 cards_html = "<div class='mini-card-grid'>"
                 for o in offers_data:
@@ -471,53 +482,29 @@ def lending_dashboard_fragment():
 
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem;">{mode_text}</div>
-            </div>
-            <div class="stats-3-col" style="margin-bottom: 0;">
-                <div>
-                    <div class="okx-label">高利爆發機率</div>
-                    <div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div>
-                </div>
-                <div>
-                    <div class="okx-label">訂單簿失衡度</div>
-                    <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{obi_val:.3f}</div>
-                </div>
-                <div>
-                    <div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div>
-                    <div class="okx-value-mono {target_color}" style="font-size:1.2rem; {target_style}">{f'{spike_target:.2f}%'}</div>
-                </div>
+            <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem; margin-bottom: 12px;">{mode_text}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 24px;">
+                <div><div class="okx-label">高利爆發機率</div><div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div></div>
+                <div><div class="okx-label">訂單簿失衡度</div><div class="okx-value-mono" style="font-size:1.6rem; color:#fff;">{obi_val:.2f}</div></div>
+                <div><div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div><div class="okx-value-mono {target_color}" style="font-size:1.6rem; {target_style}">{f'{spike_target:.2f}%'}</div></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown(f"""
-        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #3b4048;">
-            <div style="color: #ffffff; font-weight: 600; font-size: 1.1rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
-            <div class="stats-3-col" style="margin-bottom: 0;">
+        <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #2b3139;">
+            <div style="color: #ffffff; font-weight: 600; font-size: 1.05rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
                 <div>
-                    <div class="okx-label">總觸發警報</div>
-                    <div class="okx-value-mono" style="font-size:1.4rem; color:#fff;">{total_alerts} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
+                    <div style="color: #cbd5e1; font-size: 0.9rem; margin-bottom: 4px;">動態預測勝率</div>
+                    <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.4rem; font-weight: 700;">{win_rate:.1f}% <span style="font-size:0.85rem; font-weight:400; color:#7a808a;">({hits} TP / {misses} FP)</span></div>
                 </div>
-                <div>
-                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內，市場的確發生高利成交">成功命中 (True Positive)</div>
-                    <div class="okx-value-mono text-green" style="font-size:1.4rem;">{hits} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
-                </div>
-                <div>
-                    <div class="okx-label okx-tooltip" data-tip="系統發出警報後15分鐘內未發生高利，導致權重受罰">誤判懲罰 (False Positive)</div>
-                    <div class="okx-value-mono text-red" style="font-size:1.4rem;">{misses} <span style="font-size:0.8rem; color:#7a808a;">次</span></div>
-                </div>
-            </div>
-            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #2b3139;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div style="color: #cbd5e1; font-size: 0.95rem;">動態預測勝率 (Win Rate)</div>
-                    <div class="okx-value-mono {'text-green' if win_rate >= 50 else 'text-yellow'}" style="font-size: 1.6rem; font-weight: 700;">{win_rate:.1f}%</div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="color: #cbd5e1; font-size: 0.95rem;" class="okx-tooltip" data-tip="建議狙擊目標與真實最高成交價的平均落差">平均目標誤差 (Target MAE) <i>i</i></div>
+                <div style="text-align: right;">
+                    <div style="color: #cbd5e1; font-size: 0.9rem; margin-bottom: 4px;" class="okx-tooltip" data-tip="建議狙擊目標與真實最高成交價的平均落差">平均目標誤差 <i>i</i></div>
                     <div class="okx-value-mono" style="font-size: 1.2rem; color: #fff;">± {target_mae:.2f}%</div>
                 </div>
             </div>
+            <div style="margin-top: 12px; font-size: 0.8rem; color: #7a808a;">總觸發警報：{total_alerts} 次</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -574,15 +561,13 @@ def lending_dashboard_fragment():
             
         st.markdown("<hr style='border-color: #2b3139; margin: 24px 0;'>", unsafe_allow_html=True)
 
-        # 新增系統側錄與終端機日誌面板
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>系統側錄與終端機日誌 (System Logs)</div>", unsafe_allow_html=True)
-        counts = data.get("sample_counts", {"decisions": 0, "spikes": 0})
-        st.markdown(f"""
-        <div class="okx-panel" style="padding:16px; margin-bottom:24px;">
+        with st.expander("系統側錄與終端機日誌 (System Logs)"):
+            counts = data.get("sample_counts", {"decisions": 0, "spikes": 0})
+            st.markdown(f"""
             <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #2b3139; padding-bottom: 8px;">
                 <div style="color:#7a808a; font-size:0.9rem;">資料庫採集進度</div>
             </div>
-            <div class="stats-2-col" style="margin-bottom: 16px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
                 <div>
                     <div class="okx-label">常態特徵側錄</div>
                     <div class="okx-value-mono" style="color:#fff; font-size:1.2rem;">{counts.get('decisions', 0)} <span style="font-size:0.8rem; color:#7a808a;">筆</span></div>
@@ -600,8 +585,7 @@ def lending_dashboard_fragment():
                 <div>> Feature dimension extracted... OK.</div>
                 <div>> Awaiting next market trigger...</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>現役模型執行監測</div>", unsafe_allow_html=True)
         
