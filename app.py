@@ -361,7 +361,7 @@ def lending_dashboard_fragment():
         """, unsafe_allow_html=True)
 
     with tab_manage:
-        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配驚"], label_visibility="collapsed")
+        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
         
         if manage_view == "活躍部位":
             loans_data = data.get('loans', [])
