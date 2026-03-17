@@ -457,6 +457,10 @@ def lending_dashboard_fragment():
         obi_val = pred_metrics.get("current_obi", 0.0)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
 
+        # 提取 V2.1 巨觀量子指標
+        btc_mom = pred_metrics.get("btc_momentum_1h_pct", 0.0)
+        funding = pred_metrics.get("fbtc_funding_rate", 0.0)
+
         # 準確率統計
         metrics_data = pred_metrics.get("metrics", {})
         total_alerts = metrics_data.get("total_alerts", 0)
@@ -476,12 +480,17 @@ def lending_dashboard_fragment():
         target_color = "text-green" if is_sniper else ""
         target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
 
+        # 大盤動能顏色邏輯
+        btc_color = "#b2ff22" if btc_mom > 0 else ("#ff4d4f" if btc_mom < 0 else "#7a808a")
+
         # 概率面板
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
             <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem; margin-bottom: 12px;">{mode_text}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 24px;">
                 <div><div class="okx-label">高利爆發機率</div><div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div></div>
+                <div><div class="okx-label">BTC 1H 動能</div><div class="okx-value-mono" style="font-size:1.6rem; color:{btc_color};">{btc_mom:+.2f}%</div></div>
+                <div><div class="okx-label okx-tooltip" data-tip="衍生品做多情緒指標，大於 0 代表多頭強勢">合約資金費率 <i>i</i></div><div class="okx-value-mono" style="font-size:1.6rem; color:#fcd535;">{funding:.5f}</div></div>
                 <div><div class="okx-label">訂單簿失衡度</div><div class="okx-value-mono" style="font-size:1.6rem; color:#fff;">{obi_val:.2f}</div></div>
                 <div><div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div><div class="okx-value-mono {target_color}" style="font-size:1.6rem; {target_style}">{f'{spike_target:.2f}%'}</div></div>
             </div>
@@ -583,13 +592,14 @@ def lending_dashboard_fragment():
                 </div>
             </div>
             <div style="background:#000; border-radius:6px; padding:12px; border: 1px solid #1a1d24; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:#b2ff22; overflow-y:auto; max-height:150px;">
-                <div>> System initialized.</div>
+                <div>> Quantum Engine V2.1 initialized.</div>
+                <div>> Macro features (BTC Momentum, Funding Rate) injected.</div>
                 <div>> Database connection established.</div>
                 <div>> [ML Loop] FN missed_spikes counter active.</div>
                 <div>> Auto-calibration parameters loaded.</div>
                 <div>> Active worker cycle timestamp: {tw_full_time}</div>
-                <div>> Feature dimension extracted... OK.</div>
-                <div>> Awaiting next market trigger...</div>
+                <div>> Spatial dimension extracted... OK.</div>
+                <div>> Awaiting next FOMO market trigger...</div>
             </div>
             """, unsafe_allow_html=True)
 
