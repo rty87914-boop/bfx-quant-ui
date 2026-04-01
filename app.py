@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import timedelta, datetime
 import logging
 import json
+import collections  # [新增] 用於歷史紀錄的日期分組
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
@@ -348,8 +349,8 @@ def lending_dashboard_fragment():
         """, unsafe_allow_html=True)
 
     with tab_manage:
-        # 部位管理維度切換
-        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配驚"], label_visibility="collapsed")
+        # 部位管理維度切換 (修正了選單錯字)
+        manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
         
         if manage_view == "活躍部位":
             loans_data = data.get('loans', [])
@@ -403,20 +404,36 @@ def lending_dashboard_fragment():
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
-        else: # 歷史配對
+        else: # 歷史配對 [新增日期分組邏輯]
             matched_data = data.get('matched_trades', [])
             if not matched_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
             else:
-                cards_html = "<div class='list-view-container'>"
+                # 建立日期分組字典
+                matches_by_date = collections.OrderedDict()
                 for m in matched_data:
-                    display_time = m.get('時間', '尚未同步')
-                    rate = str(m.get('利率', ''))
-                    period = m.get('期間', '')
-                    amount = m.get('數量', 0)
+                    date_val = m.get('日期', '未知日期')
+                    if date_val not in matches_by_date:
+                        matches_by_date[date_val] = []
+                    matches_by_date[date_val].append(m)
 
-                    # 列表樣式
-                    cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
+                cards_html = "<div class='list-view-container'>"
+                for date_header, matches_in_date in matches_by_date.items():
+                    # 📅 帶有背景色的日期標題
+                    cards_html += f"""
+                    <div style='background-color: #262730; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
+                        <span style='color: #9cdcfe; font-weight: 600; font-size: 0.95rem;'>📅 {date_header}</span>
+                    </div>
+                    """
+                    
+                    for m in matches_in_date:
+                        display_time = m.get('時間', '尚未同步')
+                        rate = str(m.get('利率', ''))
+                        period = m.get('期間', '')
+                        amount = m.get('數量', 0)
+
+                        # 列表項目樣式維持你原本精緻的 OKX 設計
+                        cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}%</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
                     
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
