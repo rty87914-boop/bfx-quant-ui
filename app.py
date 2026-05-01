@@ -310,44 +310,6 @@ def lending_dashboard_fragment():
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度結算報告</div>", unsafe_allow_html=True)
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>歷史數據不足</div>", unsafe_allow_html=True)
 
-        # 績效基準
-        account_apy = data.get('hist_apy', 0)
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>績效基準對比 (Benchmark)</div>", unsafe_allow_html=True)
-        
-        etf_data = [
-            {"name": "系統回測年化", "rate": account_apy, "is_base": True}, 
-            {"name": "0056 元大高股息", "rate": 7.50}, 
-            {"name": "00878 國泰高息", "rate": 8.00}, 
-            {"name": "00713 元大高息低波", "rate": 7.80}
-        ]
-        max_rate = max([item["rate"] for item in etf_data])
-
-        grid_html = "<div class='etf-grid'>"
-        for item in etf_data:
-            is_winner = (item["rate"] == max_rate)
-            card_class = "etf-card etf-card-active" if is_winner else "etf-card"
-            sub_txt = "策略基準" if item.get("is_base") else (f"+{account_apy - item['rate']:.2f}%" if account_apy >= item['rate'] else f"{account_apy - item['rate']:.2f}%")
-            sub_style = "color:#7a808a;" if item.get("is_base") else ("color:#b2ff22;" if account_apy >= item['rate'] else "color:#ff4d4f;")
-            grid_html += f"<div class='{card_class}'><div class='etf-title'>{item['name']}</div><div class='etf-rate okx-value-mono'>{item['rate']:.2f}%</div><div style='font-size:0.75rem; margin-top:6px; font-weight:600; font-family: \"JetBrains Mono\"; {sub_style}'>{sub_txt}</div></div>"
-        grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
-
-        # 風控指標
-        true_apy = data.get('true_apy', 0)
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 10px 0;'>綜合風控指標</div>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class='okx-panel' style='padding: 16px;'>
-            <div class='okx-list-item border-bottom'>
-                <div class='okx-list-label okx-tooltip' data-tip="納入閒置資金計算之真實投資回報率">等效年化報酬 (True APY) <i>i</i></div>
-                <div class='okx-list-value text-green okx-value-mono' style='font-size:1.2rem;'>{true_apy:.2f}%</div>
-            </div>
-            <div class='okx-list-item'>
-                <div class='okx-list-label okx-tooltip' data-tip="當前已配對部位之平均毛利率">活耀部位毛年化</div>
-                <div class='okx-list-value okx-value-mono'>{active_apr:.2f}%</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
     with tab_manage:
         # 部位管理維度切換 (修正了選單錯字)
         manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
