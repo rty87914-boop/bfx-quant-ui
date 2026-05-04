@@ -47,7 +47,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 注入 JavaScript 以實現強制的黑色背景與防止手機版面溢位
+# 注入 JavaScript：強制黑底，並正確覆寫 Viewport 以鎖定手機螢幕比例防溢位
 st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -61,13 +61,15 @@ st.components.v1.html("""<script>
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
 
-        // 強制鎖定 viewport 防止手機版左右滑動撐破版面
-        const oldViewport = doc.querySelectorAll('meta[name="viewport"]');
-        oldViewport.forEach(m => m.remove());
-        const metaViewport = doc.createElement('meta');
-        metaViewport.name = 'viewport';
-        metaViewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-        doc.head.appendChild(metaViewport);
+        const viewportMeta = doc.querySelector('meta[name="viewport"]');
+        if (viewportMeta) {
+            viewportMeta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        } else {
+            const meta = doc.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+            doc.head.appendChild(meta);
+        }
     }
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
@@ -212,12 +214,14 @@ user_info = USERS[st.session_state.logged_in_user]
 # ================= 6. UI 渲染邏輯 =================
 st.columns(1) 
 
-# 修正頂部寬度比例，給予按鈕足夠空間避免溢位
-c_title, c_btn = st.columns([6, 4], vertical_alignment="center")
+# [核心修復] 移除 vertical_alignment="center"，讓 Streamlit 在手機上可以自動垂直堆疊，不再推擠出界
+c_title, c_btn = st.columns([7, 3])
 with c_title:
-    st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
+    # 加入 word-wrap 確保標題過長時也能自然折行
+    st.markdown(f'<div class="app-title" style="word-wrap: break-word;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 with c_btn:
-    with st.popover("設定"):
+    # [核心修復] 加上 use_container_width=True，把按鈕死死鎖在欄位寬度內
+    with st.popover("設定", use_container_width=True):
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統參數</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
         
@@ -256,7 +260,7 @@ def lending_dashboard_fragment():
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     true_apy = data.get('true_apy', 0)
     
-    # 聯合淨資產面板 (修改為 2x2 網格以防止排版推擠)
+    # 聯合淨資產面板 [防溢位清除：拿掉所有不必要的 white-space:nowrap]
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -267,13 +271,13 @@ def lending_dashboard_fragment():
         </div>
         <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
             <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">${data.get("total", 0):,.2f}</div>
-            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
+            <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter';">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;">
-            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
-            <div style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="納入閒置資金計算之真實投資回報率" style="white-space:nowrap;">實質淨年化 <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.05rem;">{true_apy:.2f}%</div></div>
-            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
-            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="納入閒置資金計算之真實投資回報率">實質淨年化 <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.05rem;">{true_apy:.2f}%</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -290,7 +294,7 @@ def lending_dashboard_fragment():
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
-        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -304,10 +308,8 @@ def lending_dashboard_fragment():
             df_eq = df_eq.sort_values('日期')
             df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
             
-            # 取得每個月的累計 hist_p 的最後一筆數據
             monthly_cum = df_eq.groupby('Month')['hist_p'].last()
             monthly_profit = monthly_cum.diff().fillna(monthly_cum)
-            # 將可用月份反轉，讓最新的月份在最上面
             available_months = list(monthly_profit.index)[::-1] 
             
             st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 10px 0;'>月度結算報告</div>", unsafe_allow_html=True)
@@ -358,8 +360,8 @@ def lending_dashboard_fragment():
                 total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
                 st.markdown(f"""
                 <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; margin-bottom: 16px;">
-                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div>
-                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div>
                 </div>
                 """, unsafe_allow_html=True)
 
