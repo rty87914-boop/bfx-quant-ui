@@ -47,18 +47,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 注入 JavaScript 以實現強制的黑色背景
+# 注入 JavaScript 以實現強制的黑色背景與防止手機版面溢位
 st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
         doc.documentElement.style.background = '#000000';
         doc.body.style.background = '#000000';
+        
         const oldMetas = doc.querySelectorAll('meta[name="theme-color"]');
         oldMetas.forEach(m => m.remove());
         const metaBlack = doc.createElement('meta');
         metaBlack.name = 'theme-color';
         metaBlack.content = '#000000';
         doc.head.appendChild(metaBlack);
+
+        // 強制鎖定 viewport 防止手機版左右滑動撐破版面
+        const oldViewport = doc.querySelectorAll('meta[name="viewport"]');
+        oldViewport.forEach(m => m.remove());
+        const metaViewport = doc.createElement('meta');
+        metaViewport.name = 'viewport';
+        metaViewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        doc.head.appendChild(metaViewport);
     }
     try { forceBlackAndPWA(document); } catch(e) {}
     try { forceBlackAndPWA(window.parent.document); } catch(e) {}
@@ -203,7 +212,8 @@ user_info = USERS[st.session_state.logged_in_user]
 # ================= 6. UI 渲染邏輯 =================
 st.columns(1) 
 
-c_title, c_btn = st.columns([7, 3], vertical_alignment="center")
+# 修正頂部寬度比例，給予按鈕足夠空間避免溢位
+c_title, c_btn = st.columns([6, 4], vertical_alignment="center")
 with c_title:
     st.markdown(f'<div class="app-title">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 with c_btn:
@@ -246,7 +256,7 @@ def lending_dashboard_fragment():
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     true_apy = data.get('true_apy', 0)
     
-    # 聯合淨資產面板
+    # 聯合淨資產面板 (修改為 2x2 網格以防止排版推擠)
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -259,11 +269,11 @@ def lending_dashboard_fragment():
             <div class="pulse-text okx-value-mono" style="font-size:2.4rem; font-weight:700; color:#ffffff; line-height:1;">${data.get("total", 0):,.2f}</div>
             <div style="font-size:0.9rem; color:#7a808a; font-weight:500; font-family:'Inter'; white-space:nowrap;">≈ {int(data.get("total", 0)*data.get("fx", 32)):,} TWD</div>
         </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between;">
-            <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
-            <div><div class="okx-label okx-tooltip" data-tip="納入閒置資金計算之真實投資回報率" style="white-space:nowrap;">實質淨年化 <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.05rem;">{true_apy:.2f}%</div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
-            <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;">
+            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="納入閒置資金計算之真實投資回報率" style="white-space:nowrap;">實質淨年化 <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.05rem;">{true_apy:.2f}%</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
+            <div style="flex: 1 1 45%;"><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -313,7 +323,6 @@ def lending_dashboard_fragment():
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>歷史數據不足</div>", unsafe_allow_html=True)
 
     with tab_manage:
-        # 部位管理維度切換 (修正了選單錯字)
         manage_view = st.selectbox("維度切換", ["活躍部位", "排隊中", "歷史配對"], label_visibility="collapsed")
         
         if manage_view == "活躍部位":
@@ -332,7 +341,6 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 部位卡片
                 cards_html = "<div class='mini-card-grid'>"
                 for l in loans_data:
                     amt = l.get('金額', 0)
@@ -358,7 +366,6 @@ def lending_dashboard_fragment():
                 cards_html = "<div class='mini-card-grid'>"
                 for o in offers_data:
                     status_raw = o.get('狀態', '')
-                    # 簡化狀態顯示
                     short_status = "展期" if "換倉" in status_raw else "排隊"
                     tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
                     wait_time = parse_wait_time(o.get('排隊時間', ''))
@@ -368,12 +375,11 @@ def lending_dashboard_fragment():
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
-        else: # 歷史配對 [新增日期分組邏輯]
+        else: 
             matched_data = data.get('matched_trades', [])
             if not matched_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未擷取到歷史配對紀錄</div>", unsafe_allow_html=True)
             else:
-                # 建立日期分組字典
                 matches_by_date = collections.OrderedDict()
                 for m in matched_data:
                     date_val = m.get('日期', '未知日期')
@@ -383,27 +389,21 @@ def lending_dashboard_fragment():
 
                 cards_html = "<div class='list-view-container'>"
                 for date_header, matches_in_date in matches_by_date.items():
-                    # 📅 帶有背景色的日期標題
                     cards_html += f"""
                     <div style='background-color: #262730; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
                         <span style='color: #9cdcfe; font-weight: 600; font-size: 0.95rem;'>📅 {date_header}</span>
                     </div>
                     """
-                    
                     for m in matches_in_date:
                         display_time = m.get('時間', '尚未同步')
                         rate = str(m.get('利率', ''))
                         period = m.get('期間', '')
                         amount = m.get('數量', 0)
-
-                        # 列表項目樣式維持你原本精緻的 OKX 設計
                         cards_html += f"<div class='list-view-item'><div class='list-view-col-left'><div class='list-view-subtext'>{display_time}</div><div class='list-view-maintext text-green okx-value-mono'>{rate}%</div></div><div class='list-view-col-right'><div class='list-view-maintext okx-value-mono'>${amount:,.0f}</div><div class='list-view-subtext'>{period} 天</div></div></div>"
-                    
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_radar:
-        # 市場深度雷達
         top_bids = data.get('top_bids', [])
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>買方深度需求</div>", unsafe_allow_html=True)
         
@@ -418,7 +418,6 @@ def lending_dashboard_fragment():
                 period = b.get('period', 0)
                 vol = b.get('vol', 0)
                 
-                # 判斷是否為「大肥羊」：利率高且天數長
                 is_fat_sheep = rate >= 10.0 and period >= 120
                 tag_class = "tag-red" if is_fat_sheep else ("tag-yellow" if rate >= 10.0 else "tag-gray")
                 tag_text = "高溢價長單" if is_fat_sheep else ("高利需求" if rate >= 10.0 else "一般需求")
@@ -438,33 +437,27 @@ def lending_dashboard_fragment():
         obi_val = pred_metrics.get("current_obi", 0.0)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
 
-        # 提取 V2.1 巨觀量子指標
         btc_mom = pred_metrics.get("btc_momentum_1h_pct", 0.0)
         funding = pred_metrics.get("fbtc_funding_rate", 0.0)
 
-        # 準確率統計
         metrics_data = pred_metrics.get("metrics", {})
         total_alerts = metrics_data.get("total_alerts", 0)
         hits = metrics_data.get("hits", 0)
         misses = metrics_data.get("misses", 0)
-        missed_spikes = metrics_data.get("missed_spikes", 0) # 相容新數據
+        missed_spikes = metrics_data.get("missed_spikes", 0)
         target_error_sum = metrics_data.get("target_error_sum", 0.0)
         
         win_rate = (hits / total_alerts * 100) if total_alerts > 0 else 0.0
         target_mae = (target_error_sum / hits) if hits > 0 else 0.0
 
-        # UI 顏色判斷
         mode_color = "#ff4d4f" if is_sniper else "#b2ff22"
         mode_text = "主動狙擊模式 [ACTIVE]" if is_sniper else "常態追蹤模式 [STANDBY]"
         prob_color = "#ff4d4f" if spike_prob >= 70 else ("#fcd535" if spike_prob >= 40 else "#7a808a")
         
         target_color = "text-green" if is_sniper else ""
         target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
-
-        # 大盤動能顏色邏輯
         btc_color = "#b2ff22" if btc_mom > 0 else ("#ff4d4f" if btc_mom < 0 else "#7a808a")
 
-        # 概率面板
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
             <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem; margin-bottom: 12px;">{mode_text}</div>
@@ -478,7 +471,6 @@ def lending_dashboard_fragment():
         </div>
         """, unsafe_allow_html=True)
 
-        # 準確率面板 (更新計分板)
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-color: #2b3139;">
             <div style="color: #ffffff; font-weight: 600; font-size: 1.05rem; margin-bottom: 12px;">模型準確率與勝率追蹤 (Model Precision)</div>
@@ -501,7 +493,6 @@ def lending_dashboard_fragment():
 
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>常態決策模型反向工程</div>", unsafe_allow_html=True)
         
-        # 反向工程模型
         if not bot_decisions or len(bot_decisions) < 5:
             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>樣本量不足，系統持續採集特徵中...</div>", unsafe_allow_html=True)
         else:
@@ -509,7 +500,6 @@ def lending_dashboard_fragment():
             df_spy['diff_frr'] = df_spy['bot_rate_yearly'] - df_spy['market_frr']
             df_spy['diff_twap'] = df_spy['bot_rate_yearly'] - df_spy['market_twap']
             
-            # 統計特徵
             std_rate = df_spy['bot_rate_yearly'].std()
             std_frr = df_spy['diff_frr'].std()
             std_twap = df_spy['diff_twap'].std()
@@ -518,7 +508,6 @@ def lending_dashboard_fragment():
             mean_diff_frr = df_spy['diff_frr'].mean()
             mean_diff_twap = df_spy['diff_twap'].mean()
             
-            # 模型邏輯判定
             if pd.isna(std_rate):
                 logic_name = "特徵不足"
                 logic_desc = "模型需要更多歷史交易記錄以執行統計分析。"
@@ -555,7 +544,6 @@ def lending_dashboard_fragment():
             
         st.markdown("<hr style='border-color: #2b3139; margin: 24px 0;'>", unsafe_allow_html=True)
 
-        # 系統日誌
         with st.expander("系統側錄與終端機日誌 (System Logs)"):
             counts = data.get("sample_counts", {"decisions": 0, "spikes": 0})
             st.markdown(f"""
@@ -584,11 +572,9 @@ def lending_dashboard_fragment():
             </div>
             """, unsafe_allow_html=True)
 
-        # 現役模型監測
         st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>現役模型執行監測</div>", unsafe_allow_html=True)
         
         offers_data = data.get('offers', [])
-        # 只顯示 USD 的掛單來分析模型
         fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
         m_twap = data.get('market_twap', 0)
         m_vwap = data.get('market_vwap', 0)
@@ -603,7 +589,6 @@ def lending_dashboard_fragment():
                 spread_twap = o.get('spread_twap', 0)
                 spread_vwap = o.get('spread_vwap', 0)
                 
-                # Alpha 顏色
                 tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
                 tag_twap_sign = "+" if spread_twap >= 0 else ""
                 
@@ -612,10 +597,8 @@ def lending_dashboard_fragment():
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 底部留白，防止 OKX 導航欄遮擋
     st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
-# 啟動 Fragment
 if user_info["role"] == "lending":
     lending_dashboard_fragment()
 else:
