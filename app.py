@@ -230,10 +230,14 @@ except FileNotFoundError: pass
 user_info = USERS[st.session_state.logged_in_user]
 
 # ================= 6. UI 渲染邏輯 =================
+
+# 這是畫面上的第一個 st.columns，CSS 裝甲會完全覆蓋它，保證不換行！
 c_title, c_btn = st.columns([7, 3])
+
 with c_title:
     # 加入 text-overflow，讓標題在極窄螢幕下自動變成省略號，死守按鈕空間
     st.markdown(f'<div class="app-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
+
 with c_btn:
     with st.popover("設定", use_container_width=True):
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統參數</div>", unsafe_allow_html=True)
