@@ -244,6 +244,7 @@ def lending_dashboard_fragment():
     tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
     
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
+    true_apy = data.get('true_apy', 0)
     
     # 聯合淨資產面板
     st.markdown(f"""
@@ -260,6 +261,7 @@ def lending_dashboard_fragment():
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between;">
             <div><div class="okx-label" style="white-space:nowrap;">投入本金</div><div class="okx-value-mono" style="font-size:1.05rem; color:#fff;">{auto_p_display}</div></div>
+            <div><div class="okx-label okx-tooltip" data-tip="納入閒置資金計算之真實投資回報率" style="white-space:nowrap;">實質淨年化 <i>i</i></div><div class="text-green okx-value-mono" style="font-size:1.05rem;">{true_apy:.2f}%</div></div>
             <div><div class="okx-label" style="white-space:nowrap;">當天收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("today_profit", 0):.2f}</div></div>
             <div><div class="okx-label" style="white-space:nowrap;">累計收益</div><div class="text-green okx-value-mono" style="font-size:1.05rem;">+${data.get("history", 0):,.2f}</div></div>
         </div>
