@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import timedelta, datetime
 import logging
 import json
-import collections  # [新增] 用於歷史紀錄的日期分組
+import collections
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
@@ -21,6 +21,7 @@ if 'last_update' not in st.session_state: st.session_state.last_update = "尚未
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
 # ================= 2. 視覺風格定義 =================
+# 透過 CSS 強制鎖死第一個 stHorizontalBlock (也就是我們的標題與設定按鈕列)
 st.markdown("""
 <style>
 .okx-tooltip { position: relative; cursor: help; border-bottom: 1px dashed #7a808a; }
@@ -43,6 +44,24 @@ st.markdown("""
     border: 1px solid #3b4048;
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     text-align: left;
+}
+
+/* 終極防跑版：強制頂部欄位在手機版絕對不換行，且維持 7:3 比例 */
+div[data-testid="stHorizontalBlock"]:first-of-type {
+    flex-wrap: nowrap !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+}
+div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(1) {
+    flex: 1 1 70% !important;
+    width: 70% !important;
+    min-width: 0 !important; /* 允許內部文字縮小 */
+}
+div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(2) {
+    flex: 1 1 30% !important;
+    width: 30% !important;
+    min-width: 80px !important; /* 確保按鈕有最低生存空間 */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -183,7 +202,6 @@ if st.session_state.logged_in_user is None:
         st.rerun()
 
 if st.session_state.logged_in_user is None:
-    st.columns(1) 
     st.markdown("<div style='text-align:center; margin-top:8vh; margin-bottom: 24px;'><h1 style='color:#ffffff; font-weight:700;'>資金管理終端登入</h1></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
@@ -212,15 +230,11 @@ except FileNotFoundError: pass
 user_info = USERS[st.session_state.logged_in_user]
 
 # ================= 6. UI 渲染邏輯 =================
-st.columns(1) 
-
-# [核心修復] 移除 vertical_alignment="center"，讓 Streamlit 在手機上可以自動垂直堆疊，不再推擠出界
 c_title, c_btn = st.columns([7, 3])
 with c_title:
-    # 加入 word-wrap 確保標題過長時也能自然折行
-    st.markdown(f'<div class="app-title" style="word-wrap: break-word;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
+    # 加入 text-overflow，讓標題在極窄螢幕下自動變成省略號，死守按鈕空間
+    st.markdown(f'<div class="app-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 with c_btn:
-    # [核心修復] 加上 use_container_width=True，把按鈕死死鎖在欄位寬度內
     with st.popover("設定", use_container_width=True):
         st.markdown("<div style='font-weight:600; color:#fff; margin-bottom:10px;'>系統參數</div>", unsafe_allow_html=True)
         st.session_state.refresh_rate = st.selectbox("刷新頻率", options=[0, 30, 60, 120, 300], format_func=lambda x: {0:"停用", 30:"30秒", 60:"1分鐘", 120:"2分鐘", 300:"5分鐘"}[x], index=[0, 30, 60, 120, 300].index(st.session_state.refresh_rate))
@@ -260,7 +274,6 @@ def lending_dashboard_fragment():
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
     true_apy = data.get('true_apy', 0)
     
-    # 聯合淨資產面板 [防溢位清除：拿掉所有不必要的 white-space:nowrap]
     st.markdown(f"""
     <div class="okx-panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -301,7 +314,6 @@ def lending_dashboard_fragment():
     tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["總覽", "部位管理", "市場深度", "決策模型"])
 
     with tab_main:
-        # 月度結算
         if equity_history:
             df_eq = pd.DataFrame(equity_history)
             df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
