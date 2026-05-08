@@ -276,7 +276,7 @@ def lending_dashboard_fragment():
     tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
     
     auto_p_display = f"${data.get('auto_p', 0):,.0f}" if data.get('auto_p', 0) > 0 else "$0"
-    true_apy = data.get('true_apy', 0)
+    true_apy = data.get('hist_apy', 0)
     
     st.markdown(f"""
     <div class="okx-panel">
