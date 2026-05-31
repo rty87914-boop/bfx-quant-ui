@@ -6,11 +6,19 @@ from datetime import timedelta, datetime
 import logging
 import json
 import collections
+from zoneinfo import ZoneInfo
 
 # ================= 0. 系統與日誌配置 =================
 st.set_page_config(page_title="資金管理終端", layout="wide", initial_sidebar_state="collapsed")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [UI] %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# 時區設定
+try:
+    TW_TZ = ZoneInfo("Asia/Taipei")
+except Exception:
+    from datetime import timezone
+    TW_TZ = timezone(timedelta(hours=8))
 
 # ================= 1. 常數與初始化 =================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
@@ -21,7 +29,6 @@ if 'last_update' not in st.session_state: st.session_state.last_update = "尚未
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
 # ================= 2. 視覺風格定義 =================
-# 透過 CSS 強制鎖死第一個 stHorizontalBlock (也就是我們的標題與設定按鈕列)
 st.markdown("""
 <style>
 .okx-tooltip { position: relative; cursor: help; border-bottom: 1px dashed #7a808a; }
@@ -45,8 +52,6 @@ st.markdown("""
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     text-align: left;
 }
-
-/* 終極防跑版：強制頂部欄位在手機版絕對不換行，且維持 7:3 比例 */
 div[data-testid="stHorizontalBlock"]:first-of-type {
     flex-wrap: nowrap !important;
     display: flex !important;
@@ -56,17 +61,16 @@ div[data-testid="stHorizontalBlock"]:first-of-type {
 div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(1) {
     flex: 1 1 70% !important;
     width: 70% !important;
-    min-width: 0 !important; /* 允許內部文字縮小 */
+    min-width: 0 !important;
 }
 div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:nth-child(2) {
     flex: 1 1 30% !important;
     width: 30% !important;
-    min-width: 80px !important; /* 確保按鈕有最低生存空間 */
+    min-width: 80px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 注入 JavaScript：強制黑底，並正確覆寫 Viewport 以鎖定手機螢幕比例防溢位
 st.components.v1.html("""<script>
     function forceBlackAndPWA(doc) {
         if (!doc) return;
@@ -230,12 +234,9 @@ except FileNotFoundError: pass
 user_info = USERS[st.session_state.logged_in_user]
 
 # ================= 6. UI 渲染邏輯 =================
-
-# 這是畫面上的第一個 st.columns，CSS 裝甲會完全覆蓋它，保證不換行！
 c_title, c_btn = st.columns([7, 3])
 
 with c_title:
-    # 加入 text-overflow，讓標題在極窄螢幕下自動變成省略號，死守按鈕空間
     st.markdown(f'<div class="app-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
 
 with c_btn:
@@ -308,7 +309,7 @@ def lending_dashboard_fragment():
 
     st.markdown(f"""
     <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
-        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">資金使用率</div><div class="okx-value-mono {"text-red" if data.get('idle_pct', 0) > 5 else "text-green"}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">資金使用率</div><div class="okx-value-mono {'text-red' if data.get('idle_pct', 0) > 5 else 'text-green'}" style="font-size:1.3rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="當前淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.3rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.3rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
         <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">流動性預估時間</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
@@ -359,12 +360,44 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                cards_html = "<div class='mini-card-grid'>"
+                # [UI 重構] 活躍部位單行列表 (List View)
+                cards_html = "<div class='list-view-container'>"
+                current_time = datetime.now(TW_TZ)
+                
                 for l in loans_data:
                     amt = l.get('金額', 0)
                     rate = l.get('年化 (%)', 0)
-                    exp = l.get('到期時間', '')
-                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag tag-green-glow'>執行中</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>淨年化</span><span class='text-green okx-value-mono' style='font-size:0.9rem;'>{rate:.2f}%</span></div><div class='mini-stat-row'><span class='okx-list-label'>結算</span><span style='color:#848e9c; font-size:0.8rem; font-family: \"JetBrains Mono\";'>{exp}</span></div></div>"
+                    exp_str = l.get('到期時間', '') 
+                    symbol = l.get('幣種', 'USDT')
+                    
+                    remaining_text = "計算中..."
+                    try:
+                        exp_dt = datetime.strptime(f"{current_time.year}/{exp_str}", "%Y/%m/%d %H:%M").replace(tzinfo=TW_TZ)
+                        if exp_dt < current_time: exp_dt = exp_dt.replace(year=current_time.year + 1)
+                        delta = exp_dt - current_time
+                        if delta.total_seconds() <= 0: remaining_text = "即將解鎖"
+                        else:
+                            days = delta.days
+                            hours = int(delta.seconds // 3600)
+                            remaining_text = f"剩餘 {days} 天 {hours} 小時" if days > 0 else f"剩餘 {hours} 小時"
+                    except Exception:
+                        remaining_text = exp_str 
+
+                    cards_html += f"""
+                    <div style='background-color: #1e2329; border-bottom: 1px solid #2b3139; padding: 16px 12px; display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='display: flex; flex-direction: column; gap: 4px;'>
+                            <div class='text-green okx-value-mono' style='font-size: 1.25rem; font-weight: 700;'>{rate:.4f}%</div>
+                            <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;'>
+                                <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px;'>{symbol}</span>
+                                <span>{remaining_text}</span>
+                            </div>
+                        </div>
+                        <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 4px;'>
+                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.15rem; font-weight: 600;'>{amt:,.2f}</div>
+                            <div style='color: #b2ff22; font-size: 0.85rem;'>✅ 執行中</div>
+                        </div>
+                    </div>
+                    """
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -374,6 +407,12 @@ def lending_dashboard_fragment():
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
             else:
                 total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
+                
+                # 從 V3.0 的 prediction_metrics 中提取 AI 建議目標
+                ai_suggested_target = data.get("prediction_metrics", {}).get("suggested_spike_target", 0.0)
+                is_sniper = data.get("prediction_metrics", {}).get("is_sniper_mode_active", False)
+                ai_color = "#ff4d4f" if is_sniper else "#b2ff22"
+
                 st.markdown(f"""
                 <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; margin-bottom: 16px;">
                     <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div>
@@ -381,15 +420,42 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
 
-                cards_html = "<div class='mini-card-grid'>"
+                # [UI 重構] 排隊掛單的單行列表，並加入 AI 預測參數對比
+                cards_html = "<div class='list-view-container'>"
                 for o in offers_data:
                     status_raw = o.get('狀態', '')
-                    short_status = "展期" if "換倉" in status_raw else "排隊"
-                    tag_class = "tag-green" if "換倉" in status_raw else "tag-gray"
+                    is_rolling = "換倉" in status_raw
+                    short_status = "🟡 換倉中" if is_rolling else "⏳ 排隊中"
                     wait_time = parse_wait_time(o.get('排隊時間', ''))
                     amt = o.get('金額', 0)
-                    rate_str = o.get('毛年化', '')
-                    cards_html += f"<div class='mini-item-card'><div class='mini-card-header'><span class='okx-tag {tag_class}'>{short_status}</span><span class='mini-card-amt'>${amt:,.0f}</span></div><div class='mini-stat-row'><span class='okx-list-label'>報價</span><span class='okx-value-mono' style='font-size:0.9rem; color:#fff;'>{rate_str}</span></div><div class='mini-stat-row'><span class='okx-list-label'>遲滯</span><span style='color:#848e9c; font-size:0.8rem;'>{wait_time}</span></div></div>"
+                    rate = float(o.get('raw_rate', 0.0))
+                    period = str(o.get('掛單天期', ''))
+                    symbol = o.get('幣種', 'USDT')
+                    
+                    # 計算掛單與 AI 預測目標的落差
+                    diff_to_ai = rate - ai_suggested_target
+                    diff_sign = "+" if diff_to_ai >= 0 else ""
+                    diff_color = "#b2ff22" if diff_to_ai >= 0 else "#ff4d4f"
+                    
+                    cards_html += f"""
+                    <div style='background-color: #1e2329; border-bottom: 1px solid #2b3139; padding: 16px 12px; display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='display: flex; flex-direction: column; gap: 6px;'>
+                            <div style='display: flex; align-items: center; gap: 8px;'>
+                                <span class='okx-value-mono' style='font-size: 1.25rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
+                                <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;'>{period}</span>
+                            </div>
+                            <div style='background-color: rgba(0,0,0,0.2); border-left: 2px solid {ai_color}; padding: 4px 8px; border-radius: 0 4px 4px 0; font-size: 0.8rem;'>
+                                <div style='color: #7a808a;'>AI 建議: <span class='okx-value-mono' style='color:{ai_color};'>{ai_suggested_target:.2f}%</span></div>
+                                <div style='color: #7a808a;'>掛單落差: <span class='okx-value-mono' style='color:{diff_color};'>{diff_sign}{diff_to_ai:.2f}%</span></div>
+                            </div>
+                        </div>
+                        
+                        <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px;'>
+                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.15rem; font-weight: 600;'>{amt:,.2f}</div>
+                            <div style='color: #7a808a; font-size: 0.85rem;'>{short_status} ({wait_time})</div>
+                        </div>
+                    </div>
+                    """
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -401,8 +467,7 @@ def lending_dashboard_fragment():
                 matches_by_date = collections.OrderedDict()
                 for m in matched_data:
                     date_val = m.get('日期', '未知日期')
-                    if date_val not in matches_by_date:
-                        matches_by_date[date_val] = []
+                    if date_val not in matches_by_date: matches_by_date[date_val] = []
                     matches_by_date[date_val].append(m)
 
                 cards_html = "<div class='list-view-container'>"
@@ -447,16 +512,20 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_spy:
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與概率預測 (Regime Prediction)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與 V3 機構級概率預測</div>", unsafe_allow_html=True)
         
         pred_metrics = data.get("prediction_metrics", {})
         spike_prob = pred_metrics.get("spike_probability_pct", 0.0)
         is_sniper = pred_metrics.get("is_sniper_mode_active", False)
-        obi_val = pred_metrics.get("current_obi", 0.0)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
 
-        btc_mom = pred_metrics.get("btc_momentum_1h_pct", 0.0)
-        funding = pred_metrics.get("fbtc_funding_rate", 0.0)
+        # 提取特徵 (包含 V3 新增的領先指標)
+        features = pred_metrics.get("features", {})
+        obi_val = features.get("obi", 0.0)
+        btc_mom = features.get("btc_momentum", 0.0) * 100 # 轉為百分比顯示
+        funding = features.get("funding_rate", 0.0)
+        dvol_val = features.get("dvol", 50.0)
+        ust_premium = features.get("ust_premium", 1.0)
 
         metrics_data = pred_metrics.get("metrics", {})
         total_alerts = metrics_data.get("total_alerts", 0)
@@ -475,16 +544,22 @@ def lending_dashboard_fragment():
         target_color = "text-green" if is_sniper else ""
         target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
         btc_color = "#b2ff22" if btc_mom > 0 else ("#ff4d4f" if btc_mom < 0 else "#7a808a")
+        
+        # V3 領先指標顏色邏輯
+        dvol_color = "#ff4d4f" if dvol_val > 65 else ("#fcd535" if dvol_val > 55 else "#7a808a")
+        ust_color = "#ff4d4f" if ust_premium < 0.999 or ust_premium > 1.002 else "#b2ff22"
 
         st.markdown(f"""
         <div class="okx-panel" style="padding:16px; margin-bottom:24px; border-left: 4px solid {mode_color};">
             <div style="color: {mode_color}; font-weight: 700; font-size: 1.1rem; margin-bottom: 12px;">{mode_text}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 24px;">
                 <div><div class="okx-label">高利爆發機率</div><div class="okx-value-mono" style="font-size:1.6rem; color:{prob_color};">{spike_prob:.1f}%</div></div>
-                <div><div class="okx-label">BTC 1H 動能</div><div class="okx-value-mono" style="font-size:1.6rem; color:{btc_color};">{btc_mom:+.2f}%</div></div>
-                <div><div class="okx-label okx-tooltip" data-tip="衍生品做多情緒指標，大於 0 代表多頭強勢">合約資金費率 <i>i</i></div><div class="okx-value-mono" style="font-size:1.6rem; color:#fcd535;">{funding:.5f}</div></div>
-                <div><div class="okx-label">訂單簿失衡度</div><div class="okx-value-mono" style="font-size:1.6rem; color:#fff;">{obi_val:.2f}</div></div>
                 <div><div class="okx-label okx-tooltip" data-tip="系統隨時推估的大盤潛在阻力位（觸發時轉為實質掛單目標）">建議狙擊目標 <i>i</i></div><div class="okx-value-mono {target_color}" style="font-size:1.6rem; {target_style}">{f'{spike_target:.2f}%'}</div></div>
+                <div><div class="okx-label okx-tooltip" data-tip="Deribit 選擇權隱含波動率，>65 代表市場預期即將暴漲暴跌">DVOL (波動率) <i>i</i></div><div class="okx-value-mono" style="font-size:1.6rem; color:{dvol_color};">{dvol_val:.1f}</div></div>
+                <div><div class="okx-label okx-tooltip" data-tip="穩定幣脫鉤指數，偏離 1.000 過大代表流動性枯竭引發恐慌">UST 溢價指數 <i>i</i></div><div class="okx-value-mono" style="font-size:1.6rem; color:{ust_color};">{ust_premium:.4f}</div></div>
+                <div><div class="okx-label">BTC 1H 動能</div><div class="okx-value-mono" style="font-size:1.6rem; color:{btc_color};">{btc_mom:+.2f}%</div></div>
+                <div><div class="okx-label">合約資金費率</div><div class="okx-value-mono" style="font-size:1.6rem; color:#fcd535;">{funding:.5f}</div></div>
+                <div><div class="okx-label">訂單簿失衡度</div><div class="okx-value-mono" style="font-size:1.6rem; color:#fff;">{obi_val:.2f}</div></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -579,41 +654,16 @@ def lending_dashboard_fragment():
                 </div>
             </div>
             <div style="background:#000; border-radius:6px; padding:12px; border: 1px solid #1a1d24; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:#b2ff22; overflow-y:auto; max-height:150px;">
-                <div>> Quantum Engine V2.1 initialized.</div>
-                <div>> Macro features (BTC Momentum, Funding Rate) injected.</div>
+                <div>> Quantum Engine V3.0 initialized.</div>
+                <div>> Macro features (DVOL, UST Premium) injected.</div>
                 <div>> Database connection established.</div>
-                <div>> [ML Loop] FN missed_spikes counter active.</div>
+                <div>> [ML Loop] Asymmetrical loss function active.</div>
                 <div>> Auto-calibration parameters loaded.</div>
                 <div>> Active worker cycle timestamp: {tw_full_time}</div>
                 <div>> Spatial dimension extracted... OK.</div>
                 <div>> Awaiting next FOMO market trigger...</div>
             </div>
             """, unsafe_allow_html=True)
-
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:24px 0 12px 0;'>現役模型執行監測</div>", unsafe_allow_html=True)
-        
-        offers_data = data.get('offers', [])
-        fUSD_offers = [o for o in offers_data if 'USD' in o.get('幣種', '')]
-        m_twap = data.get('market_twap', 0)
-        m_vwap = data.get('market_vwap', 0)
-        
-        if not fUSD_offers:
-             st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>查無掛單樣本。</div>", unsafe_allow_html=True)
-        else:
-            cards_html = "<div class='okx-card-grid'>"
-            for o in fUSD_offers:
-                raw_rate = o.get('raw_rate', 0)
-                amt = o.get('金額', 0)
-                spread_twap = o.get('spread_twap', 0)
-                spread_vwap = o.get('spread_vwap', 0)
-                
-                tag_twap_class = "tag-green" if spread_twap >= 0 else "tag-gray"
-                tag_twap_sign = "+" if spread_twap >= 0 else ""
-                
-                cards_html += f"<div class='okx-item-card' style='border-color: #3b4048;'><div class='okx-card-header'><span class='okx-tag {tag_twap_class}'>Alpha {tag_twap_sign}{spread_twap:.2f}%</span><span class='okx-card-amt'>${amt:,.0f}</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>策略執行費率</span><span class='okx-list-value okx-value-mono text-green' style='font-size:1.1rem;'>{raw_rate:.2f}%</span></div><div class='okx-list-item border-bottom'><span class='okx-list-label'>Δ TWAP ({m_twap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#0ea5e9;'>{tag_twap_sign}{spread_twap:.2f}%</span></div><div class='okx-list-item'><span class='okx-list-label'>Δ VWAP ({m_vwap:.2f}%)</span><span class='okx-list-value okx-value-mono' style='color:#fcd535;'>{'+' if spread_vwap >= 0 else ''}{spread_vwap:.2f}%</span></div></div>"
-                
-            cards_html += "</div>"
-            st.markdown(cards_html, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 60px; width: 100%; display: block; visibility: hidden;'></div>", unsafe_allow_html=True)
 
