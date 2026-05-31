@@ -360,41 +360,35 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # [UI 重構] 活躍部位單行列表 (List View)
-                cards_html = "<div class='list-view-container'>"
-                current_time = datetime.now(TW_TZ)
-                
+                # [UI 重構 & Bug修復] 純粹極簡風格，去除冗餘標籤
+                cards_html = "<div>"
                 for l in loans_data:
                     amt = l.get('金額', 0)
                     rate = l.get('年化 (%)', 0)
-                    exp_str = l.get('到期時間', '') 
                     symbol = l.get('幣種', 'USDT')
                     
-                    remaining_text = "計算中..."
-                    try:
-                        exp_dt = datetime.strptime(f"{current_time.year}/{exp_str}", "%Y/%m/%d %H:%M").replace(tzinfo=TW_TZ)
-                        if exp_dt < current_time: exp_dt = exp_dt.replace(year=current_time.year + 1)
-                        delta = exp_dt - current_time
-                        if delta.total_seconds() <= 0: remaining_text = "即將解鎖"
+                    delta_seconds = l.get('_sort_sec')
+                    if isinstance(delta_seconds, (int, float)):
+                        if delta_seconds <= 0:
+                            remaining_text = "即將解鎖"
                         else:
-                            days = delta.days
-                            hours = int(delta.seconds // 3600)
+                            days = int(delta_seconds // 86400)
+                            hours = int((delta_seconds % 86400) // 3600)
                             remaining_text = f"剩餘 {days} 天 {hours} 小時" if days > 0 else f"剩餘 {hours} 小時"
-                    except Exception:
-                        remaining_text = exp_str 
+                    else:
+                        remaining_text = str(l.get('到期時間', ''))
 
                     cards_html += f"""
-                    <div style='background-color: #1e2329; border-bottom: 1px solid #2b3139; padding: 16px 12px; display: flex; justify-content: space-between; align-items: center;'>
+                    <div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
                         <div style='display: flex; flex-direction: column; gap: 4px;'>
-                            <div class='text-green okx-value-mono' style='font-size: 1.25rem; font-weight: 700;'>{rate:.4f}%</div>
-                            <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;'>
-                                <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px;'>{symbol}</span>
+                            <div class='text-green okx-value-mono' style='font-size: 1.3rem; font-weight: 700;'>{rate:.4f}%</div>
+                            <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;'>
+                                <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #e2e8f0;'>{symbol}</span>
                                 <span>{remaining_text}</span>
                             </div>
                         </div>
                         <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 4px;'>
-                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.15rem; font-weight: 600;'>{amt:,.2f}</div>
-                            <div style='color: #b2ff22; font-size: 0.85rem;'>✅ 執行中</div>
+                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
                         </div>
                     </div>
                     """
@@ -408,7 +402,6 @@ def lending_dashboard_fragment():
             else:
                 total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
                 
-                # 從 V3.0 的 prediction_metrics 中提取 AI 建議目標
                 ai_suggested_target = data.get("prediction_metrics", {}).get("suggested_spike_target", 0.0)
                 is_sniper = data.get("prediction_metrics", {}).get("is_sniper_mode_active", False)
                 ai_color = "#ff4d4f" if is_sniper else "#b2ff22"
@@ -420,8 +413,8 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [UI 重構] 排隊掛單的單行列表，並加入 AI 預測參數對比
-                cards_html = "<div class='list-view-container'>"
+                # [UI 重構] AI 輕量化對比 + 圓角卡片
+                cards_html = "<div>"
                 for o in offers_data:
                     status_raw = o.get('狀態', '')
                     is_rolling = "換倉" in status_raw
@@ -430,29 +423,28 @@ def lending_dashboard_fragment():
                     amt = o.get('金額', 0)
                     rate = float(o.get('raw_rate', 0.0))
                     period = str(o.get('掛單天期', ''))
-                    symbol = o.get('幣種', 'USDT')
                     
-                    # 計算掛單與 AI 預測目標的落差
                     diff_to_ai = rate - ai_suggested_target
                     diff_sign = "+" if diff_to_ai >= 0 else ""
                     diff_color = "#b2ff22" if diff_to_ai >= 0 else "#ff4d4f"
                     
                     cards_html += f"""
-                    <div style='background-color: #1e2329; border-bottom: 1px solid #2b3139; padding: 16px 12px; display: flex; justify-content: space-between; align-items: center;'>
-                        <div style='display: flex; flex-direction: column; gap: 6px;'>
+                    <div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='display: flex; flex-direction: column; gap: 8px;'>
                             <div style='display: flex; align-items: center; gap: 8px;'>
-                                <span class='okx-value-mono' style='font-size: 1.25rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
-                                <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;'>{period}</span>
+                                <span class='okx-value-mono' style='font-size: 1.3rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
+                                <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{period}</span>
                             </div>
-                            <div style='background-color: rgba(0,0,0,0.2); border-left: 2px solid {ai_color}; padding: 4px 8px; border-radius: 0 4px 4px 0; font-size: 0.8rem;'>
-                                <div style='color: #7a808a;'>AI 建議: <span class='okx-value-mono' style='color:{ai_color};'>{ai_suggested_target:.2f}%</span></div>
-                                <div style='color: #7a808a;'>掛單落差: <span class='okx-value-mono' style='color:{diff_color};'>{diff_sign}{diff_to_ai:.2f}%</span></div>
+                            <div style='font-size: 0.8rem; display:flex; align-items:center; gap: 6px;'>
+                                <span style='color: #7a808a;'>AI 目標 <span class='okx-value-mono' style='color:#ffffff;'>{ai_suggested_target:.2f}%</span></span>
+                                <span style='color: #4b5563;'>|</span>
+                                <span class='okx-value-mono' style='color:{diff_color};'>{diff_sign}{diff_to_ai:.2f}%</span>
                             </div>
                         </div>
                         
                         <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px;'>
-                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.15rem; font-weight: 600;'>{amt:,.2f}</div>
-                            <div style='color: #7a808a; font-size: 0.85rem;'>{short_status} ({wait_time})</div>
+                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
+                            <div style='color: #7a808a; font-size: 0.85rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 12px;'>{short_status} ({wait_time})</div>
                         </div>
                     </div>
                     """
