@@ -360,7 +360,6 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # [UI 重構 & Bug修復] 純粹極簡風格，去除冗餘標籤
                 cards_html = "<div>"
                 for l in loans_data:
                     amt = l.get('金額', 0)
@@ -378,20 +377,21 @@ def lending_dashboard_fragment():
                     else:
                         remaining_text = str(l.get('到期時間', ''))
 
+                    # 左側貼齊的 HTML 標籤
                     cards_html += f"""
-                    <div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
-                        <div style='display: flex; flex-direction: column; gap: 4px;'>
-                            <div class='text-green okx-value-mono' style='font-size: 1.3rem; font-weight: 700;'>{rate:.4f}%</div>
-                            <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;'>
-                                <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #e2e8f0;'>{symbol}</span>
-                                <span>{remaining_text}</span>
-                            </div>
-                        </div>
-                        <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 4px;'>
-                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
-                        </div>
-                    </div>
-                    """
+<div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
+    <div style='display: flex; flex-direction: column; gap: 4px;'>
+        <div class='text-green okx-value-mono' style='font-size: 1.3rem; font-weight: 700;'>{rate:.4f}%</div>
+        <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;'>
+            <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #e2e8f0;'>{symbol}</span>
+            <span>{remaining_text}</span>
+        </div>
+    </div>
+    <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 4px;'>
+        <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
+    </div>
+</div>
+"""
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -413,7 +413,6 @@ def lending_dashboard_fragment():
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [UI 重構] AI 輕量化對比 + 圓角卡片
                 cards_html = "<div>"
                 for o in offers_data:
                     status_raw = o.get('狀態', '')
@@ -428,26 +427,26 @@ def lending_dashboard_fragment():
                     diff_sign = "+" if diff_to_ai >= 0 else ""
                     diff_color = "#b2ff22" if diff_to_ai >= 0 else "#ff4d4f"
                     
+                    # 左側貼齊的 HTML 標籤
                     cards_html += f"""
-                    <div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
-                        <div style='display: flex; flex-direction: column; gap: 8px;'>
-                            <div style='display: flex; align-items: center; gap: 8px;'>
-                                <span class='okx-value-mono' style='font-size: 1.3rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
-                                <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{period}</span>
-                            </div>
-                            <div style='font-size: 0.8rem; display:flex; align-items:center; gap: 6px;'>
-                                <span style='color: #7a808a;'>AI 目標 <span class='okx-value-mono' style='color:#ffffff;'>{ai_suggested_target:.2f}%</span></span>
-                                <span style='color: #4b5563;'>|</span>
-                                <span class='okx-value-mono' style='color:{diff_color};'>{diff_sign}{diff_to_ai:.2f}%</span>
-                            </div>
-                        </div>
-                        
-                        <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px;'>
-                            <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
-                            <div style='color: #7a808a; font-size: 0.85rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 12px;'>{short_status} ({wait_time})</div>
-                        </div>
-                    </div>
-                    """
+<div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
+    <div style='display: flex; flex-direction: column; gap: 8px;'>
+        <div style='display: flex; align-items: center; gap: 8px;'>
+            <span class='okx-value-mono' style='font-size: 1.3rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
+            <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{period}</span>
+        </div>
+        <div style='font-size: 0.8rem; display:flex; align-items:center; gap: 6px;'>
+            <span style='color: #7a808a;'>AI 目標 <span class='okx-value-mono' style='color:#ffffff;'>{ai_suggested_target:.2f}%</span></span>
+            <span style='color: #4b5563;'>|</span>
+            <span class='okx-value-mono' style='color:{diff_color};'>{diff_sign}{diff_to_ai:.2f}%</span>
+        </div>
+    </div>
+    <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px;'>
+        <div class='okx-value-mono' style='color: #ffffff; font-size: 1.2rem; font-weight: 600;'>{amt:,.2f}</div>
+        <div style='color: #7a808a; font-size: 0.85rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 12px;'>{short_status} ({wait_time})</div>
+    </div>
+</div>
+"""
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -464,11 +463,12 @@ def lending_dashboard_fragment():
 
                 cards_html = "<div class='list-view-container'>"
                 for date_header, matches_in_date in matches_by_date.items():
+                    # 左側貼齊的 HTML 標籤
                     cards_html += f"""
-                    <div style='background-color: #262730; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
-                        <span style='color: #9cdcfe; font-weight: 600; font-size: 0.95rem;'>📅 {date_header}</span>
-                    </div>
-                    """
+<div style='background-color: #262730; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
+    <span style='color: #9cdcfe; font-weight: 600; font-size: 0.95rem;'>📅 {date_header}</span>
+</div>
+"""
                     for m in matches_in_date:
                         display_time = m.get('時間', '尚未同步')
                         rate = str(m.get('利率', ''))
