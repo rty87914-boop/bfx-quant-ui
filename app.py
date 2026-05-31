@@ -377,13 +377,13 @@ def lending_dashboard_fragment():
                     else:
                         remaining_text = str(l.get('到期時間', ''))
 
-                    # 左側貼齊的 HTML 標籤
+                    # 左側貼齊且顏色修改為極簡深色 (#0c0e12)
                     cards_html += f"""
-<div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
+<div style='background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
     <div style='display: flex; flex-direction: column; gap: 4px;'>
         <div class='text-green okx-value-mono' style='font-size: 1.3rem; font-weight: 700;'>{rate:.4f}%</div>
         <div style='color: #7a808a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;'>
-            <span style='background-color: #2b3139; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #e2e8f0;'>{symbol}</span>
+            <span style='background-color: #1a1d24; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #e2e8f0;'>{symbol}</span>
             <span>{remaining_text}</span>
         </div>
     </div>
@@ -427,13 +427,13 @@ def lending_dashboard_fragment():
                     diff_sign = "+" if diff_to_ai >= 0 else ""
                     diff_color = "#b2ff22" if diff_to_ai >= 0 else "#ff4d4f"
                     
-                    # 左側貼齊的 HTML 標籤
+                    # 左側貼齊且顏色修改為極簡深色 (#0c0e12)
                     cards_html += f"""
-<div style='background-color: #1e2329; border: 1px solid #2b3139; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
+<div style='background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; margin-bottom: 12px; padding: 16px 16px; display: flex; justify-content: space-between; align-items: center;'>
     <div style='display: flex; flex-direction: column; gap: 8px;'>
         <div style='display: flex; align-items: center; gap: 8px;'>
             <span class='okx-value-mono' style='font-size: 1.3rem; font-weight: 700; color: #fff;'>{rate:.4f}%</span>
-            <span style='background-color: #2b3139; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{period}</span>
+            <span style='background-color: #1a1d24; color: #7a808a; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{period}</span>
         </div>
         <div style='font-size: 0.8rem; display:flex; align-items:center; gap: 6px;'>
             <span style='color: #7a808a;'>AI 目標 <span class='okx-value-mono' style='color:#ffffff;'>{ai_suggested_target:.2f}%</span></span>
@@ -463,9 +463,9 @@ def lending_dashboard_fragment():
 
                 cards_html = "<div class='list-view-container'>"
                 for date_header, matches_in_date in matches_by_date.items():
-                    # 左側貼齊的 HTML 標籤
+                    # 左側貼齊且標籤背景顏色調暗 (#0c0e12)
                     cards_html += f"""
-<div style='background-color: #262730; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
+<div style='background-color: #0c0e12; border: 1px solid #1a1d24; padding: 8px 12px; border-radius: 6px; margin: 16px 0 8px 0;'>
     <span style='color: #9cdcfe; font-weight: 600; font-size: 0.95rem;'>📅 {date_header}</span>
 </div>
 """
