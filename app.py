@@ -606,7 +606,7 @@ def lending_dashboard_fragment():
             st.markdown(cards_html, unsafe_allow_html=True)
 
     with tab_spy:
-        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>狀態切換與 V3 機構級概率預測</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:10px 0 12px 0;'>概率預測Ｖ３</div>", unsafe_allow_html=True)
         
         pred_metrics = data.get("prediction_metrics", {})
         spike_prob = pred_metrics.get("spike_probability_pct", 0.0)
