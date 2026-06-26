@@ -264,7 +264,7 @@ user_info = USERS[st.session_state.logged_in_user]
 c_title, c_btn = st.columns([7, 3])
 
 with c_title:
-    st.markdown(f'<div class="app-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">{user_info["name"]} 控制面板</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">{user_info["name"]} 監控儀表</div>', unsafe_allow_html=True)
 
 with c_btn:
     with st.popover("設定", use_container_width=True):
