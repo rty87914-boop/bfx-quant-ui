@@ -28,29 +28,33 @@ if 'refresh_rate' not in st.session_state: st.session_state.refresh_rate = 300
 if 'last_update' not in st.session_state: st.session_state.last_update = "尚未同步"
 if 'logged_in_user' not in st.session_state: st.session_state.logged_in_user = None
 
-# ================= 2. 視覺風格定義 (加入響應式佈局) =================
+# ================= 2. 視覺風格定義 (包含手機版響應式 RWD 邏輯) =================
 st.markdown("""
 <style>
-/* 手機版響應式卡片堆疊 */
+/* 手機與平版：小螢幕時自動垂直堆疊，不超出邊界 */
 @media (max-width: 768px) {
     .responsive-grid {
         display: flex !important;
         flex-direction: column !important;
         gap: 16px !important;
     }
-    .responsive-grid > div {
+    .grid-cell {
         flex: 1 1 100% !important;
-        min-height: auto !important;
+        width: 100% !important;
     }
 }
+
+/* 電腦版：大螢幕時左右並排對比 */
 @media (min-width: 769px) {
     .responsive-grid {
         display: flex !important;
         flex-direction: row !important;
+        justify-content: space-between !important;
         gap: 16px !important;
     }
-    .responsive-grid > div {
-        flex: 1 1 48% !important;
+    .grid-cell {
+        flex: 1 1 49% !important;
+        width: 49% !important;
     }
 }
 
@@ -279,7 +283,7 @@ with c_btn:
                 st.query_params["pin"] = new_pin.strip()
                 st.success("密碼已重置。")
             else:
-                st.warning("密碼長度需至少 4 個字元。")
+                st.warning("密碼長度需至少 4 個字元. ")
 
         st.markdown("<hr style='margin: 10px 0; border-color: #2b3139;'>", unsafe_allow_html=True)
         tw_full_time = get_taiwan_time(st.session_state.last_update)
@@ -290,7 +294,7 @@ with c_btn:
             st.query_params.clear()
             st.rerun()
 
-# ----------------- 模組：量解放貸面板 (全新響應式首頁) -----------------
+# ----------------- 模組：量解放貸面板 (完美 RWD 看板) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
     data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
@@ -301,15 +305,24 @@ def lending_dashboard_fragment():
     
     # 提取傳統放貸與 DeFi 資產數據
     bfx_total = data.get("total", 0)
-    
     defi_data = data.get("defi_assets", {})
     defi_total_usd = defi_data.get("total_value_usd", 0.0) if defi_data else 0.0
     
     # 計算全局總淨資產 (CEX + DeFi)
     global_total = bfx_total + defi_total_usd
     global_twd = int(global_total * data.get("fx", 32))
+
+    cex_apr = data.get("active_apr", 0)
+    loans_data = data.get('loans', [])
+    total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
     
-    # ----------------- 全局總資產橫幅 -----------------
+    s_bal = defi_data.get('raw_balance', 0) if defi_data else 0.0
+    s_rate = defi_data.get('exchange_rate', 1.1938) if defi_data else 1.1938
+    s_price = defi_data.get('underlying_price', 0.0) if defi_data else 0.0
+    s_symbol = defi_data.get('symbol', 'sETHFI')
+    s_net = defi_data.get('network', 'OP Mainnet')
+    
+    # ----------------- 整合大輸出：將所有 HTML 封裝進單一 markdown 輸出中 -----------------
     st.markdown(f"""
     <div style="background: linear-gradient(180deg, #11151c 0%, #000000 100%); border-bottom: 1px solid #1a1d24; padding: 24px 16px; margin: -1rem -1rem 16px -1rem; display: flex; justify-content: space-between; align-items: center;">
         <div>
@@ -323,19 +336,10 @@ def lending_dashboard_fragment():
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
 
-    # ----------------- 響應式雙欄看板 (手機垂直，桌機並排) -----------------
-    cex_apr = data.get("active_apr", 0)
-    loans_data = data.get('loans', [])
-    total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
-    
-    s_bal = defi_data.get('raw_balance', 0) if defi_data else 0.0
-    s_rate = defi_data.get('exchange_rate', 1.1938) if defi_data else 1.1938
-    
-    st.markdown(f"""
-    <div class="responsive-grid" style="margin-bottom: 24px;">
-        <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px;">
+    <div class="responsive-grid" style="margin-bottom: 24px; width: 100%;">
+        
+        <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <span style="font-weight:700; color:#fff; font-size:1.15rem;">⚔️ CEX 放貸部位</span>
                 <span style="background-color:rgba(178, 255, 34, 0.1); color:#b2ff22; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">自動量化 API</span>
@@ -366,7 +370,7 @@ def lending_dashboard_fragment():
             </div>
         </div>
         
-        <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px;">
+        <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <span style="font-weight:700; color:#fff; font-size:1.15rem;">🔮 DeFi 質押部位</span>
                 <span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">EVM 鏈上同步</span>
@@ -377,17 +381,17 @@ def lending_dashboard_fragment():
             </div>
             <div style="display:flex; justify-content:space-between; border-top:1px solid #1a1d24; padding-top:16px; margin-top:12px;">
                 <div>
-                    <div class="okx-label okx-tooltip" data-tip="官方底層智能合約與 EigenLayer 收益引擎固定回報率">常態複利年化 <i>i</i></div>
+                    <div class="okx-label okx-tooltip" data-tip="官方底層智能合約固定收益回報率">常態複利年化 <i>i</i></div>
                     <div class="okx-value-mono text-green" style="font-size:1.2rem;">9.5700%</div>
                 </div>
                 <div style="text-align:right;">
                     <div class="okx-label">現貨美金報價</div>
-                    <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${defi_data.get('underlying_price', 0.0):.4f}</div>
+                    <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${s_price:.4f}</div>
                 </div>
             </div>
             <div style="display:flex; justify-content:space-between; margin-top:12px;">
                 <div>
-                    <div class="okx-label">鏈上憑證 ({defi_data.get('symbol', 'sETHFI')})</div>
+                    <div class="okx-label">鏈上憑證 ({s_symbol})</div>
                     <div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">{s_bal:,.4f}</div>
                 </div>
                 <div style="text-align:right;">
@@ -396,10 +400,28 @@ def lending_dashboard_fragment():
                 </div>
             </div>
         </div>
+
     </div>
     """, unsafe_allow_html=True)
 
+    # ----------------- 額外加值：橫向精簡狀態條 -----------------
+    next_repay_str = format_time_smart(data.get('next_repayment_time', 9999999))
+    active_apr = data.get("active_apr", 0)
+    market_twap = data.get("market_twap", 0)
+    alpha_premium = active_apr - market_twap
+    alpha_color = "text-green" if alpha_premium >= 0 else "text-red"
+    alpha_sign = "+" if alpha_premium >= 0 else ""
 
+    st.markdown(f"""
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">CEX 資金使用率</div><div class="okx-value-mono {'text-red' if data.get('idle_pct', 0) > 5 else 'text-green'}" style="font-size:1.2rem;">{100 - data.get("idle_pct", 0):.1f}%</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label okx-tooltip" data-tip="放貸淨年化超越真實成交均價的幅度">Alpha 溢價 <i>i</i></div><div class="okx-value-mono {alpha_color}" style="font-size:1.2rem;">{alpha_sign}{alpha_premium:.2f}%</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">CEX 待結算利息</div><div class="text-green okx-value-mono" style="font-size:1.2rem;">+${data.get("next_payout_total", 0):.2f}</div></div>
+        <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">放貸流動性預估</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{next_repay_str}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ----------------- 下方明細頁籤系統 -----------------
     tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["結算報表", "訂單管理", "市場深度", "決策模型"])
 
     with tab_main:
@@ -429,7 +451,6 @@ def lending_dashboard_fragment():
         manage_view = st.selectbox("維度切換", ["放貸合約", "排隊中", "歷史配對"], label_visibility="collapsed")
         
         if manage_view == "放貸合約":
-            loans_data = data.get('loans', [])
             if not loans_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
             else:
@@ -473,9 +494,14 @@ def lending_dashboard_fragment():
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>訂單簿無排隊資料</div>", unsafe_allow_html=True)
             else:
                 total_offer_amt = sum(o.get('金額', 0) for o in offers_data)
-                
                 ai_suggested_target = data.get("prediction_metrics", {}).get("suggested_spike_target", 0.0)
-                is_sniper = data.get("prediction_metrics", {}).get("is_sniper_mode_active", False)
+
+                st.markdown(f"""
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; margin-bottom: 16px;">
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">掛單總額</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${total_offer_amt:,.0f}</div></div>
+                    <div class="status-card" style="flex: 1 1 45%;"><div class="okx-label">掛單數量</div><div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{len(offers_data)} <span style="font-size:0.8rem; color:#7a808a; font-family:'Inter';">筆</span></div></div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 cards_html = "<div>"
                 for o in offers_data:
@@ -573,7 +599,7 @@ def lending_dashboard_fragment():
         is_sniper = pred_metrics.get("is_sniper_mode_active", False)
         spike_target = pred_metrics.get("suggested_spike_target", 0.0)
 
-        # 提取特徵 (包含 V3 新增的領先指標)
+        # 提取特徵 
         features = pred_metrics.get("features", {})
         obi_val = features.get("obi", 0.0)
         btc_mom = features.get("btc_momentum", 0.0) * 100 
@@ -676,7 +702,7 @@ def lending_dashboard_fragment():
                 border_color = "#b2ff22"
             else:
                 logic_name = "動態網格部署 (Dynamic Grid)"
-                logic_desc = "系統判定：訂單分佈呈現非線性特徵，推估採用多層階梯網格或基於資金池深度的動態定價模型。"
+                logic_desc = "系統判定：訂單分佈呈現非線性特徵，推估採用多層梯形網格或基於資金池深度的動態定價模型。"
                 box_color = "rgba(168, 85, 247, 0.05)"
                 border_color = "#a855f7"
 
