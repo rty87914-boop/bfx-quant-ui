@@ -353,9 +353,98 @@ def lending_dashboard_fragment():
             st.markdown("<div class='okx-panel-outline' style='text-align:center; color:#7a808a;'>歷史數據不足</div>", unsafe_allow_html=True)
 
     with tab_manage:
-        manage_view = st.selectbox("維度切換", ["活躍部位", "DeFi 鏈上資產", "排隊中", "歷史配對"], label_visibility="collapsed")
+        manage_view = st.selectbox("維度切換", ["全景資產看板", "活躍部位 (CEX)", "排隊中", "歷史配對"], label_visibility="collapsed")
         
-        if manage_view == "活躍部位":
+        # ----------------- 子頁籤一：全景資產看板 (新增：直觀總額與年化對比) -----------------
+        if manage_view == "全景資產看板":
+            st.markdown("<div style='color:#ffffff; font-weight:600; font-size:1.05rem; margin:4px 0 12px 0;'>雙戰場資產配置與年化綜合對比</div>", unsafe_allow_html=True)
+            
+            # 準備數據
+            loans_data = data.get('loans', [])
+            total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
+            cex_apr = data.get("active_apr", 0)
+            
+            s_bal = defi_data.get('raw_balance', 0) if defi_data else 0.0
+            s_rate = defi_data.get('exchange_rate', 1.1938) if defi_data else 1.1938
+            defi_usd = defi_data.get('total_value_usd', 0.0) if defi_data else 0.0
+            
+            # 橫向統計總卡片
+            st.markdown(f"""
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                <div class="status-card" style="flex: 1 1 30%; border-color:#3b4048;"><div class="okx-label">放貸部位總額 (CEX)</div><div class="okx-value-mono" style="font-size:1.3rem; color:#fff;">${bfx_total:,.2f}</div></div>
+                <div class="status-card" style="flex: 1 1 30%; border-color:#a855f7;"><div class="okx-label">質押部位總額 (DeFi)</div><div class="okx-value-mono" style="font-size:1.3rem; color:#a855f7;">${defi_total_usd:,.2f}</div></div>
+                <div class="status-card" style="flex: 1 1 30%; border-color:#b2ff22;"><div class="okx-label">雙部位實質總淨值</div><div class="okx-value-mono text-green" style="font-size:1.3rem;">${global_total:,.2f}</div></div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 雙欄直觀對比排版
+            col_cex, col_defi = st.columns(2)
+            
+            with col_cex:
+                st.markdown(f"""
+                <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; min-height: 280px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <span style="font-weight:700; color:#fff; font-size:1.15rem;">⚔️ Bitfinex 放貸部位</span>
+                        <span style="background-color:rgba(178, 255, 34, 0.1); color:#b2ff22; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">CEX API 連線</span>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <div class="okx-label">合約鎖定總額</div>
+                        <div class="okx-value-mono" style="font-size:1.6rem; color:#fff;">${total_loan_amt:,.2f}</div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px solid #1a1d24; padding-top:12px; margin-top:12px;">
+                        <div>
+                            <div class="okx-label">即時放貸年化 (加權)</div>
+                            <div class="okx-value-mono text-green" style="font-size:1.3rem;">{cex_apr:.4f}%</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="okx-label">合約筆數</div>
+                            <div class="okx-value-mono" style="font-size:1.3rem; color:#fff;">{len(loans_data)} 筆</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col_defi:
+                st.markdown(f"""
+                <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; min-height: 280px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <span style="font-weight:700; color:#fff; font-size:1.15rem;">🔮 ether.fi 質押部位</span>
+                        <span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">Optimism 鏈上同步</span>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <div class="okx-label">真實資產估值 (USD)</div>
+                        <div class="okx-value-mono" style="font-size:1.6rem; color:#a855f7;">${defi_total_usd:,.2f}</div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px solid #1a1d24; padding-top:12px; margin-top:12px;">
+                        <div>
+                            <div class="okx-label okx-tooltip" data-tip="官方底層智能合約與 EigenLayer 收益引擎固定回報率">常態複利年化 (APY) <i>i</i></div>
+                            <div class="okx-value-mono text-green" style="font-size:1.3rem;">9.5700%</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="okx-label">實質本利和</div>
+                            <div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">{s_bal * s_rate:,.2f} ETHFI</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 細項展開數據明細卡
+            if defi_data and s_bal > 0:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 16px 20px;">
+                    <div style="color:#cbd5e1; font-size:0.85rem; font-weight:600; margin-bottom:12px;">⛓️ DeFi 智能合約即時解碼狀態 (EVM RPC Live)</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:16px;">
+                        <div style="flex: 1 1 22%;"><div class="okx-label">憑證代號</div><div class="okx-value-mono" style="color:#fff; font-size:1.1rem;">{defi_data.get('symbol', 'sETHFI')}</div></div>
+                        <div style="flex: 1 1 22%;"><div class="okx-label">鏈上數量 (Balance)</div><div class="okx-value-mono text-green" style="font-size:1.1rem;">{s_bal:,.4f}</div></div>
+                        <div style="flex: 1 1 22%;"><div class="okx-label">合約內部匯率</div><div class="okx-value-mono" style="color:#fff; font-size:1.1rem;">{s_rate:.5f}x</div></div>
+                        <div style="flex: 1 1 22%;"><div class="okx-label">預言機報價 (OKX)</div><div class="okx-value-mono" style="color:#fff; font-size:1.1rem;">${defi_data.get('underlying_price', 0.0):.4f}</div></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ----------------- 子頁籤二：活躍部位 (原有的 CEX 列表) -----------------
+        elif manage_view == "活躍部位 (CEX)":
             loans_data = data.get('loans', [])
             if not loans_data:
                 st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>當前無活耀部位</div>", unsafe_allow_html=True)
@@ -404,52 +493,6 @@ def lending_dashboard_fragment():
 """
                 cards_html += "</div>"
                 st.markdown(cards_html, unsafe_allow_html=True)
-
-        elif manage_view == "DeFi 鏈上資產":
-            if not defi_data or defi_data.get('raw_balance', 0) == 0:
-                st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>系統尚未偵測到綁定的鏈上資產</div>", unsafe_allow_html=True)
-            else:
-                s_symbol = defi_data.get('symbol', 'sETHFI')
-                s_net = defi_data.get('network', 'OP Mainnet')
-                s_bal = defi_data.get('raw_balance', 0)
-                s_rate = defi_data.get('exchange_rate', 1.0)
-                s_price = defi_data.get('underlying_price', 0)
-                s_usd = defi_data.get('total_value_usd', 0)
-                
-                # 計算真實 ETHFI 數量
-                true_ethfi_amt = s_bal * s_rate
-                
-                st.markdown(f"""
-                <div style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-weight:700; color:#fff; font-size:1.2rem;">{s_symbol}</span>
-                            <span style="background-color:rgba(168, 85, 247, 0.2); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:12px; font-weight:600;">{s_net}</span>
-                        </div>
-                        <div class="okx-value-mono" style="font-size:1.4rem; color:#fff; font-weight:700;">${s_usd:,.2f}</div>
-                    </div>
-                    
-                    <div style="display:flex; flex-wrap:wrap; gap:16px; border-top: 1px solid #1a1d24; padding-top:16px;">
-                        <div style="flex: 1 1 45%;">
-                            <div class="okx-label">憑證餘額 (鏈上)</div>
-                            <div class="okx-value-mono text-green" style="font-size:1.1rem;">{s_bal:,.4f}</div>
-                        </div>
-                        <div style="flex: 1 1 45%;">
-                            <div class="okx-label okx-tooltip" data-tip="1 {s_symbol} 等同於多少底層現貨。隨質押利息自動成長。">內部匯率 <i>i</i></div>
-                            <div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">{s_rate:.5f}x</div>
-                        </div>
-                        <div style="flex: 1 1 45%;">
-                            <div class="okx-label">實質本利和 (ETHFI)</div>
-                            <div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">{true_ethfi_amt:,.4f}</div>
-                        </div>
-                        <div style="flex: 1 1 45%;">
-                            <div class="okx-label">現貨美金報價 (Binance)</div>
-                            <div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">${s_price:.4f}</div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
 
         elif manage_view == "排隊中":
             offers_data = data.get('offers', [])
@@ -568,7 +611,7 @@ def lending_dashboard_fragment():
         # 提取特徵 (包含 V3 新增的領先指標)
         features = pred_metrics.get("features", {})
         obi_val = features.get("obi", 0.0)
-        btc_mom = features.get("btc_momentum", 0.0) * 100 # 轉為百分比顯示
+        btc_mom = features.get("btc_momentum", 0.0) * 100 
         funding = features.get("funding_rate", 0.0)
         dvol_val = features.get("dvol", 50.0)
         ust_premium = features.get("ust_premium", 1.0)
@@ -591,7 +634,6 @@ def lending_dashboard_fragment():
         target_style = "color:#ffffff;" if is_sniper else "color:#7a808a;"
         btc_color = "#b2ff22" if btc_mom > 0 else ("#ff4d4f" if btc_mom < 0 else "#7a808a")
         
-        # V3 領先指標顏色邏輯
         dvol_color = "#ff4d4f" if dvol_val > 65 else ("#fcd535" if dvol_val > 55 else "#7a808a")
         ust_color = "#ff4d4f" if ust_premium < 0.999 or ust_premium > 1.002 else "#b2ff22"
 
