@@ -141,7 +141,7 @@ async def fetch_cached_data(session, db_id) -> dict:
 
 async def fetch_all_auth_data() -> dict:
     default_users = {
-        "mingyu": {"pin": "1234", "name": "量化主理人", "role": "lending", "db_id": 1}
+        "mingyu": {"pin": "1234", "name": "ming0221", "role": "lending", "db_id": 1}
     }
     if not SUPABASE_URL: return default_users
     
