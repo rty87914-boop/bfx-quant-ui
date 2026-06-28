@@ -339,7 +339,7 @@ def lending_dashboard_fragment():
 <div class="responsive-grid" style="margin-bottom: 24px; width: 100%;">
 <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-<span style="font-weight:700; color:#fff; font-size:1.15rem;">CEX 放貸部位</span>
+<span style="font-weight:700; color:#fff; font-size:1.15rem;">CEX 放貸模型測試</span>
 <span style="background-color:rgba(178, 255, 34, 0.1); color:#b2ff22; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">自動量化 API</span>
 </div>
 <div style="margin-bottom:12px;">
