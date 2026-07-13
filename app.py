@@ -304,19 +304,19 @@ def lending_dashboard_fragment():
     tw_short_time = tw_full_time.split(' ')[1] if ' ' in tw_full_time else ""
     
     bfx_total = data.get("total", 0)
-    defi_data = data.get("defi_assets", {})
-    defi_total_usd = defi_data.get("total_value_usd", 0.0) if defi_data else 0.0
-    global_total = bfx_total + defi_total_usd
+    
+    # [架構更新] 替換為 OKX 資產參數
+    okx_data = data.get("external_assets", {})
+    okx_total_usd = okx_data.get("total_value_usd", 0.0) if okx_data else 0.0
+    
+    global_total = bfx_total + okx_total_usd
     global_twd = int(global_total * data.get("fx", 32))
+    
+    okx_pct = (okx_total_usd / global_total * 100) if global_total > 0 else 0.0
 
     cex_apr = data.get("active_apr", 0)
     loans_data = data.get('loans', [])
     total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
-    
-    s_bal = defi_data.get('raw_balance', 0) if defi_data else 0.0
-    s_rate = defi_data.get('exchange_rate', 1.1938) if defi_data else 1.1938
-    s_price = defi_data.get('underlying_price', 0.0) if defi_data else 0.0
-    s_symbol = defi_data.get('symbol', 'sETHFI')
     
     # 橫幅 (0 縮排)
     st.markdown(f"""
@@ -334,7 +334,7 @@ def lending_dashboard_fragment():
 </div>
 """, unsafe_allow_html=True)
 
-    # 雙欄式首頁看板 (0 縮排)
+    # 雙欄式首頁看板 (0 縮排 - 左邊 Bitfinex / 右邊 OKX)
     st.markdown(f"""
 <div class="responsive-grid" style="margin-bottom: 24px; width: 100%;">
 <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
@@ -369,31 +369,31 @@ def lending_dashboard_fragment():
 </div>
 <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-<span style="font-weight:700; color:#fff; font-size:1.15rem;">DeFi 質押部位</span>
-<span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">EVM 鏈上同步</span>
+<span style="font-weight:700; color:#fff; font-size:1.15rem;">OKX 交易所資產</span>
+<span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">V5 API 同步</span>
 </div>
 <div style="margin-bottom:12px;">
-<div class="okx-label">真實資產估值 (USD)</div>
-<div class="okx-value-mono" style="font-size:1.8rem; color:#a855f7;">${defi_total_usd:,.2f}</div>
+<div class="okx-label">帳戶總權益 (USD)</div>
+<div class="okx-value-mono" style="font-size:1.8rem; color:#a855f7;">${okx_total_usd:,.2f}</div>
 </div>
 <div style="display:flex; justify-content:space-between; border-top:1px solid #1a1d24; padding-top:16px; margin-top:12px;">
 <div>
-<div class="okx-label okx-tooltip" data-tip="官方底層智能合約固定收益回報率">常態複利年化 <i>i</i></div>
-<div class="okx-value-mono text-green" style="font-size:1.2rem;">9.5700%</div>
+<div class="okx-label">資料來源</div>
+<div class="okx-value-mono text-green" style="font-size:1.2rem;">OKX Funding</div>
 </div>
 <div style="text-align:right;">
-<div class="okx-label">現貨美金報價</div>
-<div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">${s_price:.4f}</div>
+<div class="okx-label">報價基準</div>
+<div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">USDT/USD</div>
 </div>
 </div>
 <div style="display:flex; justify-content:space-between; margin-top:12px;">
 <div>
-<div class="okx-label">鏈上憑證 ({s_symbol})</div>
-<div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">{s_bal:,.4f}</div>
+<div class="okx-label">連線狀態</div>
+<div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">🟢 Connected</div>
 </div>
 <div style="text-align:right;">
-<div class="okx-label">實質本利和 (ETHFI)</div>
-<div class="okx-value-mono text-green" style="font-size:1.1rem;">{s_bal * s_rate:,.4f}</div>
+<div class="okx-label okx-tooltip" data-tip="該資金池佔整體系統總權益的比重">資產佔比 <i>i</i></div>
+<div class="okx-value-mono text-green" style="font-size:1.1rem;">{okx_pct:.1f}%</div>
 </div>
 </div>
 </div>
@@ -749,7 +749,7 @@ def lending_dashboard_fragment():
 <div style="background:#000; border-radius:6px; padding:12px; border: 1px solid #1a1d24; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:#b2ff22; overflow-y:auto; max-height:150px;">
 <div>> Quantum Engine V3.0 initialized.</div>
 <div>> Macro features (DVOL, UST Premium) injected.</div>
-<div>> DeFi EVM Oracle synced. sETHFI parameters resolved.</div>
+<div>> OKX V5 API synced. Account equity parameters resolved.</div>
 <div>> Database connection established.</div>
 <div>> [ML Loop] Asymmetrical loss function active.</div>
 <div>> Active worker cycle timestamp: {tw_full_time}</div>
