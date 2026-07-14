@@ -369,7 +369,7 @@ def lending_dashboard_fragment():
 </div>
 <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-<span style="font-weight:700; color:#fff; font-size:1.15rem;">OKX 交易所資產</span>
+<span style="font-weight:700; color:#fff; font-size:1.15rem;">OKX 山寨幣資產</span>
 <span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">V5 API 同步</span>
 </div>
 <div style="margin-bottom:12px;">
