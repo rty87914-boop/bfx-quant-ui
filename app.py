@@ -392,7 +392,7 @@ def lending_dashboard_fragment():
 <div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">🟢 Connected</div>
 </div>
 <div style="text-align:right;">
-<div class="okx-label okx-tooltip" data-tip="該資金池佔整體系統總權益的比重">資產佔比 <i>i</i></div>
+<div class="okx-label okx-tooltip" data-tip="預計總投入資產的比重">計畫資產佔比 <i>i</i></div>
 <div class="okx-value-mono text-green" style="font-size:1.1rem;">{okx_pct:.1f}%</div>
 </div>
 </div>
