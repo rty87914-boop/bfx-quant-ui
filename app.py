@@ -2,6 +2,8 @@ import streamlit as st
 import aiohttp
 import asyncio
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import timedelta, datetime
 import logging
 import json
@@ -95,6 +97,7 @@ div[data-testid="stHorizontalBlock"]:first-of-type > div[data-testid="column"]:n
     width: 30% !important;
     min-width: 80px !important;
 }
+.strategy-card { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #a855f7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -168,14 +171,18 @@ async def update_user_settings(db_id: int, new_settings: dict):
         except Exception: pass
     return False
 
-async def fetch_equity_history(session) -> list:
-    if not SUPABASE_URL: return []
+# [架構更新] 聯合獲取 Bitfinex 與 OKX 的歷史淨值
+async def fetch_history_tables(session) -> tuple:
+    if not SUPABASE_URL: return [], []
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    bfx, okx = [], []
     try:
         async with session.get(f"{SUPABASE_URL}/rest/v1/bfx_nav?select=record_date,auto_p,hist_p&order=record_date.asc", headers=headers, timeout=5) as res:
-            if res.status == 200: return await res.json()
+            if res.status == 200: bfx = await res.json()
+        async with session.get(f"{SUPABASE_URL}/rest/v1/okx_portfolio_nav?select=record_date,total_value_usd&order=record_date.asc", headers=headers, timeout=5) as res:
+            if res.status == 200: okx = await res.json()
     except Exception: pass
-    return []
+    return bfx, okx
 
 async def fetch_bot_decisions(session) -> list:
     if not SUPABASE_URL: return []
@@ -188,7 +195,11 @@ async def fetch_bot_decisions(session) -> list:
 
 async def fetch_all_data_lending():
     async with aiohttp.ClientSession() as session:
-        return await asyncio.gather(fetch_cached_data(session, 1), fetch_equity_history(session), fetch_bot_decisions(session))
+        return await asyncio.gather(
+            fetch_cached_data(session, 1), 
+            fetch_history_tables(session), 
+            fetch_bot_decisions(session)
+        )
 
 def format_time_smart(seconds):
     if not seconds or seconds >= 9999999: return "--"
@@ -297,7 +308,12 @@ with c_btn:
 # ----------------- 模組：量解放貸面板 (完美 RWD 看板 - 零縮排防破圖版) -----------------
 @st.fragment(run_every=timedelta(seconds=st.session_state.refresh_rate) if st.session_state.refresh_rate > 0 else None)
 def lending_dashboard_fragment():
-    data, equity_history, bot_decisions = asyncio.run(fetch_all_data_lending())
+    # [架構更新] 解包後端傳來的歷史紀錄 (bfx_hist 與 okx_hist)
+    res = asyncio.run(fetch_all_data_lending())
+    data = res[0]
+    bfx_hist, okx_hist = res[1]
+    bot_decisions = res[2]
+    
     if not data: return
         
     tw_full_time = get_taiwan_time(st.session_state.last_update)
@@ -305,20 +321,21 @@ def lending_dashboard_fragment():
     
     bfx_total = data.get("total", 0)
     
-    # [架構更新] 替換為 OKX 資產參數
     okx_data = data.get("external_assets", {})
     okx_total_usd = okx_data.get("total_value_usd", 0.0) if okx_data else 0.0
     
     global_total = bfx_total + okx_total_usd
     global_twd = int(global_total * data.get("fx", 32))
-    
-    okx_pct = (okx_total_usd / global_total * 100) if global_total > 0 else 0.0
 
     cex_apr = data.get("active_apr", 0)
     loans_data = data.get('loans', [])
     total_loan_amt = sum(l.get('金額', 0) for l in loans_data)
     
-    # 橫幅 (0 縮排)
+    # 本金計算
+    c_dep = data.get("cum_deposits", 0)
+    c_wit = data.get("cum_withdrawals", 0)
+    
+    # 橫幅 (0 縮排) - 加入本金動態數據
     st.markdown(f"""
 <div style="background: linear-gradient(180deg, #11151c 0%, #000000 100%); border-bottom: 1px solid #1a1d24; padding: 24px 16px; margin: -1rem -1rem 16px -1rem; display: flex; justify-content: space-between; align-items: center;">
 <div>
@@ -326,15 +343,51 @@ def lending_dashboard_fragment():
 <div class="pulse-text okx-value-mono" style="font-size: 2.2rem; font-weight: 700; color: #b2ff22; line-height: 1;">${global_total:,.2f}</div>
 <div style="font-size: 0.85rem; color: #7a808a; font-family: 'Inter'; margin-top: 4px;">≈ {global_twd:,} TWD</div>
 </div>
-<div style="text-align: right;">
-<div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center; justify-content: flex-end; margin-bottom: 8px;">
+<div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+<div style="color:#b2ff22; font-size:0.75rem; font-weight:600; display:flex; align-items:center; justify-content: flex-end;">
 <span style="display:inline-block; width:6px; height:6px; background-color:#b2ff22; border-radius:50%; margin-right:4px;"></span>Live {tw_short_time}
+</div>
+<div style="display: flex; gap: 16px;">
+<div style="text-align: right;"><div style="color:#7a808a; font-size:0.75rem;">CEX 投入本金</div><div class="okx-value-mono" style="color:#fff; font-size:1rem;">${c_dep:,.0f}</div></div>
+<div style="text-align: right;"><div style="color:#7a808a; font-size:0.75rem;">CEX 取走本金</div><div class="okx-value-mono" style="color:#fff; font-size:1rem;">${c_wit:,.0f}</div></div>
 </div>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-    # 雙欄式首頁看板 (0 縮排 - 左邊 Bitfinex / 右邊 OKX)
+    # 雙欄式首頁看板
+    # [架構更新] OKX 區塊引入動態迴圈，渲染 holdings 與 strategies
+    okx_html = f"""
+<div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+<span style="font-weight:700; color:#fff; font-size:1.15rem;">OKX 全自動策略池</span>
+<span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">動態探測</span>
+</div>
+<div style="margin-bottom:12px;">
+<div class="okx-label">帳戶總估值 (USD)</div>
+<div class="okx-value-mono" style="font-size:1.8rem; color:#a855f7;">${okx_total_usd:,.2f}</div>
+</div>
+<div style="border-top:1px solid #1a1d24; padding-top:12px;">
+"""
+
+    if okx_data and (okx_data.get('holdings') or okx_data.get('strategies')):
+        for h in okx_data.get('holdings', []):
+            okx_html += f"<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:0.9rem;'><span style='color:#7a808a;'>{h['type']} ({h['symbol']})</span><span class='okx-value-mono' style='color:#fff;'>${h['usd_value']:,.1f}</span></div>"
+        for s in okx_data.get('strategies', []):
+            val_display = f"{s.get('apy',0):.2f}%" if 'apy' in s else (f"${s.get('pnl',0):.2f}" if 'pnl' in s else "")
+            okx_html += f"""
+<div class='strategy-card'>
+<div style='display:flex; justify-content:space-between; align-items:center;'>
+<span style='color:#fff; font-weight:600; font-size:0.9rem;'>{s['name']}</span>
+<span class='okx-value-mono text-green' style='font-size:1rem;'>{val_display}</span>
+</div>
+<div style='color:#7a808a; font-size:0.8rem; margin-top:4px;'>鎖定資產: ${s['amount']:,.1f}</div>
+</div>"""
+    else:
+        okx_html += "<div style='color:#7a808a; font-size:0.85rem; text-align:center; padding:10px 0;'>無活躍部位或等待資料同步...</div>"
+
+    okx_html += "</div></div>"
+
     st.markdown(f"""
 <div class="responsive-grid" style="margin-bottom: 24px; width: 100%;">
 <div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
@@ -367,36 +420,7 @@ def lending_dashboard_fragment():
 </div>
 </div>
 </div>
-<div class="grid-cell" style="background-color: #0c0e12; border: 1px solid #1a1d24; border-radius: 12px; padding: 20px; box-sizing: border-box;">
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-<span style="font-weight:700; color:#fff; font-size:1.15rem;">OKX 山寨幣資產</span>
-<span style="background-color:rgba(168, 85, 247, 0.1); color:#a855f7; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:600;">V5 API 同步</span>
-</div>
-<div style="margin-bottom:12px;">
-<div class="okx-label">帳戶總權益 (USD)</div>
-<div class="okx-value-mono" style="font-size:1.8rem; color:#a855f7;">${okx_total_usd:,.2f}</div>
-</div>
-<div style="display:flex; justify-content:space-between; border-top:1px solid #1a1d24; padding-top:16px; margin-top:12px;">
-<div>
-<div class="okx-label">資料來源</div>
-<div class="okx-value-mono text-green" style="font-size:1.2rem;">OKX Funding</div>
-</div>
-<div style="text-align:right;">
-<div class="okx-label">報價基準</div>
-<div class="okx-value-mono" style="font-size:1.2rem; color:#fff;">USDT/USD</div>
-</div>
-</div>
-<div style="display:flex; justify-content:space-between; margin-top:12px;">
-<div>
-<div class="okx-label">連線狀態</div>
-<div class="okx-value-mono" style="font-size:1.1rem; color:#fff;">🟢 Connected</div>
-</div>
-<div style="text-align:right;">
-<div class="okx-label okx-tooltip" data-tip="預計總投入資產的比重">計畫資產佔比 <i>i</i></div>
-<div class="okx-value-mono text-green" style="font-size:1.1rem;">{okx_pct:.1f}%</div>
-</div>
-</div>
-</div>
+{okx_html}
 </div>
 """, unsafe_allow_html=True)
 
@@ -417,11 +441,48 @@ def lending_dashboard_fragment():
 </div>
 """, unsafe_allow_html=True)
 
-    tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["結算報表", "訂單管理", "市場深度", "決策模型"])
+    # [架構更新] 新增「資產軌跡」分頁
+    tab_chart, tab_main, tab_manage, tab_radar, tab_spy = st.tabs(["資產軌跡", "結算報表", "訂單管理", "市場深度", "決策模型"])
+
+    with tab_chart:
+        st.markdown("<div style='color:#fff; font-weight:600; font-size:1.05rem; margin:10px 0 16px 0;'>雙平台聯合資產圖表 (堆疊面積圖)</div>", unsafe_allow_html=True)
+        
+        bfx_df = pd.DataFrame(bfx_hist)
+        okx_df = pd.DataFrame(okx_hist)
+        
+        if not bfx_df.empty:
+            bfx_df['date'] = pd.to_datetime(bfx_df['record_date'])
+            bfx_df = bfx_df.set_index('date')[['auto_p', 'hist_p']]
+            bfx_df['BFX Total'] = bfx_df['auto_p'] + bfx_df['hist_p']
+            
+            if not okx_df.empty:
+                okx_df['date'] = pd.to_datetime(okx_df['record_date'])
+                okx_df = okx_df.set_index('date')[['total_value_usd']].rename(columns={'total_value_usd': 'OKX Total'})
+                # 使用 outer join 合併，並使用 ffill 填補未更新的日期
+                merged = bfx_df.join(okx_df, how='outer').ffill().fillna(0)
+            else:
+                merged = bfx_df
+                merged['OKX Total'] = 0
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=merged.index, y=merged['BFX Total'], mode='lines', stackgroup='one', name='CEX 放貸資產', line=dict(color='#b2ff22')))
+            fig.add_trace(go.Scatter(x=merged.index, y=merged['OKX Total'], mode='lines', stackgroup='one', name='OKX 策略資產', line=dict(color='#a855f7')))
+            fig.update_layout(
+                plot_bgcolor='#0c0e12', 
+                paper_bgcolor='#0c0e12', 
+                font_color='#7a808a', 
+                margin=dict(l=0, r=0, t=10, b=0), 
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor='#1a1d24')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.markdown("<div class='okx-panel' style='text-align:center; color:#7a808a; padding: 40px;'>資料庫數據累積中，請等待數日後繪製圖表...</div>", unsafe_allow_html=True)
 
     with tab_main:
-        if equity_history:
-            df_eq = pd.DataFrame(equity_history)
+        if bfx_hist:
+            df_eq = pd.DataFrame(bfx_hist)
             df_eq['日期'] = pd.to_datetime(df_eq['record_date'])
             df_eq = df_eq.sort_values('日期')
             df_eq['Month'] = df_eq['日期'].dt.strftime('%Y-%m')
@@ -749,7 +810,7 @@ def lending_dashboard_fragment():
 <div style="background:#000; border-radius:6px; padding:12px; border: 1px solid #1a1d24; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:#b2ff22; overflow-y:auto; max-height:150px;">
 <div>> Quantum Engine V3.0 initialized.</div>
 <div>> Macro features (DVOL, UST Premium) injected.</div>
-<div>> OKX V5 API synced. Account equity parameters resolved.</div>
+<div>> OKX V5 API synced. Dynamic Strategy Tracker activated.</div>
 <div>> Database connection established.</div>
 <div>> [ML Loop] Asymmetrical loss function active.</div>
 <div>> Active worker cycle timestamp: {tw_full_time}</div>
